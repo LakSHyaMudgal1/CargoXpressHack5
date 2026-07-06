@@ -2,144 +2,193 @@ import { useState } from "react";
 import axios from "axios";
 import { BASE_URL } from "../utils/constants";
 import { useNavigate } from "react-router-dom";
-
+import { Truck as TruckIcon, CheckCircle2 } from "lucide-react";
 
 const Truck = () => {
-
-  const [stops, setStops] = useState(["Stop-1"]); // Initially, only one stop is visible
-  const [licensePlate, setLicensePlate] = useState("1234");
-  const [totalCapacity, setTotalCapacity] = useState(1000);
-  const [currentLoad, setCurrentLoad] = useState([""]); // Stores input values for each stop
+  const [stops, setStops] = useState(["Stop-1"]);
+  const [licensePlate, setLicensePlate] = useState("");
+  const [totalCapacity, setTotalCapacity] = useState("");
+  const [currentLoad, setCurrentLoad] = useState([""]);
   const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState(""); // ✅ Success message state
+  const [plateError, setPlateError] = useState("");
+  const [plateChecking, setPlateChecking] = useState(false);
+  const [plateExists, setPlateExists] = useState(false);
   const navigate = useNavigate();
 
-  // Add a new stop dynamically
   const addStop = () => {
     if (stops.length < 10) {
       setStops([...stops, `Stop-${stops.length + 1}`]);
-      setCurrentLoad([...currentLoad, ""]); // Add empty input for new stop
+      setCurrentLoad([...currentLoad, ""]);
     }
   };
 
-  // Update currentLoad when input changes
   const updateCurrentLoad = (index, value) => {
-    const updatedLoad = [...currentLoad];
-    updatedLoad[index] = Number(value);
-    setCurrentLoad(updatedLoad);
+    const updated = [...currentLoad];
+    updated[index] = value;
+    setCurrentLoad(updated);
   };
 
-  // API call to add truck
-  const handleAddTruck = async () => {
+  const handlePlateBlur = async () => {
+    if (!licensePlate.trim()) return;
+    setPlateChecking(true);
+    setPlateError("");
     try {
-      setError(""); // ✅ Clear error before making API call
-      setSuccessMessage(""); // ✅ Clear previous success message
+      const res = await axios.get(
+        BASE_URL + "/scheduleDelivery/checkplate?licensePlate=" + encodeURIComponent(licensePlate),
+        { withCredentials: true }
+      );
+      if (res.data.exists) {
+        setPlateError("This license plate is already registered.");
+        setPlateExists(true);
+      } else {
+        setPlateError("");
+        setPlateExists(false);
+      }
+    } catch (err) {
+      setPlateExists(false);
+    } finally {
+      setPlateChecking(false);
+    }
+  };
+
+  const handleAddTruck = async () => {
+    if (plateExists) return;
+    try {
+      setError("");
+      const parsedCapacity = Number(totalCapacity);
+      const parsedLoad = currentLoad.map(Number);
 
       const res = await axios.post(
         BASE_URL + "/scheduleDelivery/addtruck",
-        { licensePlate, totalCapacity, currentLoad },
+        { licensePlate, totalCapacity: parsedCapacity, currentLoad: parsedLoad },
         { withCredentials: true }
       );
 
-      navigate('/route')
-      console.log("Truck Added:", res.data);
-      
-      // ✅ Show success message ONLY on success
-      if (res.status === 200 || res.status === 201) {
-        setSuccessMessage("Truck added successfully!");
-      }
+      navigate('/route', {
+        state: {
+          licensePlate,
+          totalCapacity: parsedCapacity,
+          currentLoad: parsedLoad,
+          remainingLoad: parsedLoad.map(l => parsedCapacity - l),
+          stops,
+        }
+      });
     } catch (err) {
-      console.log(err);
-      setError(err.response?.data || "Something went wrong");
+      const msg = err.response?.data?.message
+        || err.response?.data
+        || err.message
+        || "Something went wrong";
+      setError(typeof msg === "string" ? msg : JSON.stringify(msg));
     }
   };
 
+  const capacity = Number(totalCapacity) || 0;
+
   return (
-    <div className="flex justify-center items-center min-h-screen p-10">
-      <div className="p-8 rounded-lg shadow-lg w-[500px] bg-gray-800">
-        <h1 className="text-center text-white text-2xl font-bold mb-6">Add Truck</h1>
-
-        {/* License Plate Input */}
-        <label className="form-control w-full">
-          <div className="label">
-            <span className="label-text text-white">License Plate</span>
+    <div className="flex justify-center items-center min-h-screen p-6">
+      <div className="w-full max-w-lg">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 mb-4">
+            <TruckIcon className="w-7 h-7 text-emerald-400" />
           </div>
-          <input
-            type="text"
-            placeholder="Type here"
-            value={licensePlate}
-            onChange={(e) => setLicensePlate(e.target.value)}
-            className="input input-bordered w-full"
-          />
-        </label>
+          <p className="text-xs font-semibold text-emerald-400 tracking-widest uppercase mb-2">Fleet Management</p>
+          <h1 className="text-3xl font-bold text-white">Add Truck</h1>
+          <p className="text-white/40 mt-1 text-sm">Register a new truck and its capacity details</p>
+        </div>
 
-        {/* Total Capacity Input */}
-        <label className="form-control w-full mt-4">
-          <div className="label">
-            <span className="label-text text-white">Total Capacity</span>
+        <div className="p-8 rounded-2xl bg-white/3 border border-white/5 space-y-5">
+          {/* License Plate */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm font-medium text-white/60">License Plate</label>
+              {plateChecking && <span className="text-xs text-white/30">Checking...</span>}
+            </div>
+            <input
+              type="text"
+              placeholder="e.g. MH12AB1234"
+              value={licensePlate}
+              onChange={(e) => { setLicensePlate(e.target.value); setPlateError(""); setPlateExists(false); }}
+              onBlur={handlePlateBlur}
+              className={`w-full bg-white/5 border text-white placeholder-white/20 rounded-xl py-3 px-4 focus:outline-none transition-all ${plateError ? "border-red-500/50 focus:border-red-500/70" : "border-white/8 focus:border-emerald-500/50"}`}
+            />
+            {plateError && (
+              <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 mt-2">{plateError}</p>
+            )}
           </div>
-          <input
-            type="number"
-            placeholder="Type here"
-            value={totalCapacity}
-            onChange={(e) => setTotalCapacity(e.target.value)}
-            className="input input-bordered w-full"
-          />
-        </label>
 
-        {/* Stops Section */}
-        <span className="label-text text-white mt-6 block">Current Capacity - At Each Stop</span>
-        <ul className="timeline timeline-vertical mt-4">
-          {stops.map((stop, index) => (
-            <li key={index} className="flex items-center gap-2">
-              <div className="timeline-start text-white w-20">{stop}</div>
-              <div className="timeline-middle">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                  className="h-5 w-5 text-green-400"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </div>
-              <div className="timeline-end timeline-box w-full flex items-center gap-2">
-                <input
-                  type="number"
-                  placeholder="Enter capacity"
-                  value={currentLoad[index]}
-                  onChange={(e) => updateCurrentLoad(index, e.target.value)}
-                  className="input input-bordered w-full"
-                />
+          {/* Total Capacity */}
+          <div>
+            <label className="text-sm font-medium text-white/60 block mb-1.5">Total Capacity (kg)</label>
+            <input
+              type="number"
+              placeholder="e.g. 1000"
+              value={totalCapacity}
+              onChange={(e) => setTotalCapacity(e.target.value)}
+              className="w-full bg-white/5 border border-white/8 text-white placeholder-white/20 rounded-xl py-3 px-4 focus:outline-none focus:border-emerald-500/50 transition-all"
+            />
+          </div>
 
-                {/* Circular + Button to Add More Stops */}
-                {index === stops.length - 1 && stops.length < 10 && (
-                  <button
-                    onClick={addStop}
-                    className="h-10 w-10 flex items-center justify-center rounded-full bg-gray-700 text-gray-300 text-xl font-bold hover:bg-gray-600 transition"
-                  >
-                    +
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+          {/* Stops — Current Load */}
+          <div>
+            <label className="text-xs font-semibold text-emerald-400 tracking-widest uppercase block mb-3">
+              Current Load at Each Stop
+            </label>
+            <div className="space-y-3">
+              {stops.map((stop, index) => {
+                const load = Number(currentLoad[index]) || 0;
+                const remaining = capacity - load;
+                const isOver = load > capacity && capacity > 0;
+                return (
+                  <div key={index} className="p-4 rounded-xl bg-white/3 border border-white/5">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex-shrink-0">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      </div>
+                      <span className="text-white/60 text-sm font-medium">{stop}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        placeholder="Current load (kg)"
+                        value={currentLoad[index]}
+                        onChange={(e) => updateCurrentLoad(index, e.target.value)}
+                        className={`flex-1 bg-white/5 border text-white placeholder-white/20 rounded-xl py-2.5 px-3 focus:outline-none transition-all text-sm ${isOver ? "border-red-500/50 focus:border-red-500/70" : "border-white/8 focus:border-emerald-500/50"}`}
+                      />
+                      {index === stops.length - 1 && stops.length < 10 && (
+                        <button
+                          onClick={addStop}
+                          className="h-10 w-10 flex-shrink-0 flex items-center justify-center rounded-xl bg-white/5 border border-white/8 text-white/60 text-lg font-bold hover:bg-white/8 hover:border-white/15 hover:text-white transition-all"
+                        >
+                          +
+                        </button>
+                      )}
+                    </div>
+                    {capacity > 0 && (
+                      <p className={`text-xs mt-2 ${isOver ? "text-red-400" : "text-emerald-400"}`}>
+                        {isOver
+                          ? `⚠ Exceeds capacity by ${load - capacity} kg`
+                          : `${remaining} kg remaining`}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
-        {/* Submit Button */}
-    <button className="btn btn-success w-full mt-6" onClick={handleAddTruck}>
-          Add
-        </button>
+          {error && (
+            <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">{error}</p>
+          )}
 
-        {/* Success Message - ✅ ONLY SHOWS ON SUCCESS */}
-        {successMessage && <p className="text-green-400 text-center mt-4">{successMessage}</p>}
-
-        {/* Error Message Display */}
-        {error && <p className="text-red-500 text-center mt-4">{error}</p>}
+          <button
+            className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl py-3 px-4 transition-all shadow-lg shadow-emerald-500/20 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 mt-2"
+            onClick={handleAddTruck}
+            disabled={plateExists || plateChecking}
+          >
+            Add Truck &amp; Continue to Route
+          </button>
+        </div>
       </div>
     </div>
   );

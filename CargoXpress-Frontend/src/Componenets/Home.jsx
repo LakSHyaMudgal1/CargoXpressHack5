@@ -1,25 +1,16 @@
-import React from 'react'
-import HeroSection from './HeroSection'
-import About from './About'
-import Features from './Features'
-import AdminDashboard from './AdminDashboard'
-import ContactUs from './ContactUs'
-import ThemeProvider from './ThemeProvider'
-import Footer from './Footer'
-import FooterSec from './Footer'
+import React from 'react';
+import HeroSection from './HeroSection';
+import About from './About';
+import Features from './Features';
+import ContactUs from './ContactUs';
 
-const Home = () => {
-  return (
-    <div>
-      <ThemeProvider>
-        <HeroSection/>
-        </ThemeProvider>
-        <Features/>
-        <About/>
-        <ContactUs/>
+const Home = () => (
+  <div>
+    <HeroSection />
+    <Features />
+    <About />
+    <ContactUs />
+  </div>
+);
 
-    </div>
-  )
-}
-
-export default Home
+export default Home;

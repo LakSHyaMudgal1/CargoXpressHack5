@@ -32,7 +32,8 @@ const validateEditData=(req)=>{
 
 const validateTruckData=(req)=>{
     const {currentLoad, totalCapacity}=req.body;
-    if(!currentLoad.every(load => load < totalCapacity)) {
+    const capacity = Number(totalCapacity);
+    if(!currentLoad.every(load => Number(load) < capacity)) {
         throw new Error("Current Load cannot exceed Capacity");
     }
 }

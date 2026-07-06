@@ -49,7 +49,12 @@ authRouter.post('/signup/:userType', async (req, res)=>{
 
       if(user){
         const token= await user.getJWT();
-        res.cookie("token", token);
+        const isProduction = process.env.NODE_ENV === "production";
+        res.cookie("token", token, {
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: isProduction ? "none" : "lax",
+        });
         res.json({message: `${userType} Added Successfully`, data:user})
       }
     
@@ -83,10 +88,11 @@ authRouter.post('/signup/:userType', async (req, res)=>{
         if (isPasswordValid) {
             const token = await user.getJWT();
 
+            const isProduction = process.env.NODE_ENV === "production";
             res.cookie("token", token, {
                 httpOnly: true,
-                secure: true,  
-                sameSite: "none",  
+                secure: isProduction,
+                sameSite: isProduction ? "none" : "lax",
             });
 
             return res.json(user);

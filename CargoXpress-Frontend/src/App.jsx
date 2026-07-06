@@ -22,20 +22,22 @@ function App() {
     <Provider store={appStore}>
     <BrowserRouter basename="/">
     <Routes>
-      <Route path="/" element={<Body/>}>
-      <Route path="/" element={<Home/>}/>
+      {/* Standalone — no navbar/footer */}
       <Route path="/login" element={<Login/>}/>
-      <Route path="/truck" element={<Truck/>}/>
-      <Route path="/route" element={<AddRoute/>}/>
-      <Route path="/admin" element={<AdminDashboard/>}/>
-      <Route path="/mergedSchedule" element={<MergedSchedule/>}/>
-      <Route path="/mergeable" element={<MergeableSchedule/>}/>
-      <Route path="/profile" element={<Profile/>}/>
-      <Route path="/traderRequest" element={<AddTraderRequest/>}/>
-      <Route path="/traderList" element={<TraderList/>}/>
-      <Route path="/traderCard" element={<TraderCard/>}/>
-      <Route path="/mergeableTraders" element={<MergeableTraders/>}/>
-      
+
+      {/* All other routes get the Body layout */}
+      <Route path="/" element={<Body/>}>
+        <Route path="/" element={<Home/>}/>
+        <Route path="/truck" element={<Truck/>}/>
+        <Route path="/route" element={<AddRoute/>}/>
+        <Route path="/admin" element={<AdminDashboard/>}/>
+        <Route path="/mergedSchedule" element={<MergedSchedule/>}/>
+        <Route path="/mergeable" element={<MergeableSchedule/>}/>
+        <Route path="/profile" element={<Profile/>}/>
+        <Route path="/traderRequest" element={<AddTraderRequest/>}/>
+        <Route path="/traderList" element={<TraderList/>}/>
+        <Route path="/traderCard" element={<TraderCard/>}/>
+        <Route path="/mergeableTraders" element={<MergeableTraders/>}/>
       </Route>
     </Routes>
   </BrowserRouter>

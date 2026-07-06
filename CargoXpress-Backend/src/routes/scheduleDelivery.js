@@ -6,6 +6,17 @@ const Route = require('../models/route');
 const TraderRequest = require('../models/traderRequest');
 const {validateTruckData}=require('../utils/validation')
 
+scheduleDeliveryRouter.get('/scheduleDelivery/checkplate', companyAuth, async (req, res) => {
+    try {
+        const { licensePlate } = req.query;
+        if (!licensePlate) return res.json({ exists: false });
+        const existing = await Truck.findOne({ licensePlate });
+        res.json({ exists: !!existing });
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
 scheduleDeliveryRouter.post('/scheduleDelivery/addtruck', companyAuth, async (req, res) => {
     try {
         const { licensePlate, totalCapacity, currentLoad} = req.body;
@@ -29,10 +40,13 @@ scheduleDeliveryRouter.post('/scheduleDelivery/addtruck', companyAuth, async (re
 
         await newTruck.save();
 
-        res.status(201).send("Truck added successfully: " + newTruck);
+        res.status(201).json({ message: "Truck added successfully", data: newTruck });
     } catch (err) {
         console.error(err.stack);
-        res.status(400).send("Error adding truck: " + err.message);
+        if (err.code === 11000) {
+            return res.status(400).json({ message: `A truck with license plate "${err.keyValue?.licensePlate}" already exists.` });
+        }
+        res.status(400).json({ message: err.message });
     }
 });
 
@@ -59,10 +73,10 @@ scheduleDeliveryRouter.post('/scheduleDelivery/addroute', companyAuth, async (re
 
         await newRoute.save();
 
-        res.status(201).send("Route added successfully: " + newRoute);
+        res.status(201).json({ message: "Route added successfully", data: newRoute });
     } catch (err) {
         console.error(err.stack);
-        res.status(400).send("Error adding route: " + err.message);
+        res.status(400).json({ message: err.message });
     }
 });
 

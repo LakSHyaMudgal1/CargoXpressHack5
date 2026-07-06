@@ -1,131 +1,124 @@
-import React from 'react'
-import { Link } from "react-router-dom";
+import { Link } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { LogIn, Truck, MapPin, GitMerge, Rocket } from 'lucide-react';
+
+const steps = [
+  {
+    icon: LogIn,
+    label: 'Create Account',
+    desc: 'Sign up as a Trader or Transport Company in under a minute.',
+    tag: 'Step 1',
+  },
+  {
+    icon: Truck,
+    label: 'Register Your Truck',
+    desc: 'Add your truck with total capacity and current load at each stop.',
+    tag: 'Step 2',
+  },
+  {
+    icon: MapPin,
+    label: 'Schedule a Route',
+    desc: 'Define source, destination and all intermediate stops for the truck.',
+    tag: 'Step 3',
+  },
+  {
+    icon: GitMerge,
+    label: 'Admin Merges Cargo',
+    desc: 'The platform intelligently pairs compatible trucks and trader requests.',
+    tag: 'Step 4',
+  },
+  {
+    icon: Rocket,
+    label: 'Dispatch & Save',
+    desc: 'Optimised trucks are dispatched — cutting costs and reducing emissions.',
+    tag: 'Step 5',
+  },
+];
 
 const About = () => {
+  const user = useSelector((store) => store.user);
+  const isAdmin   = user && user.emailId?.endsWith('@cargoxpress.com');
+  const isTrader  = user && !isAdmin && user.aadharNumber !== undefined;
+  const isCompany = user && !isAdmin && user.registrationNumber !== undefined;
+
   return (
-    <div id="about" className='mt-10'>
-        <h1 className="text-3xl font-bold text-white mb-2 flex justify-center">How it Works?</h1>
-        <div className="w-20 h-1 bg-emerald-500 mx-auto mb-3 rounded-full"></div>
+    <section id="about" className="py-28 px-6 relative overflow-hidden">
+      {/* background accent */}
+      <div className="absolute right-0 top-0 w-[500px] h-[500px] bg-emerald-500/3 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
 
-        <div className="flex justify-center">
-  <ul className="timeline">
-    <li>
-      <div className="timeline-start timeline-box font-semibold text-lg">Login / Sign Up</div>
-      <div className="timeline-middle">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          className="text-green-600 h-8 w-8"
-        >
-          <path
-            fillRule="evenodd"
-            d="M12 22a10 10 0 100-20 10 10 0 000 20zm4.5-12.5a1 1 0 00-1.6-1.2L9.5 14l-2.1-2.1a1 1 0 10-1.4 1.4l3 3a1 1 0 001.5-.1l5-6z"
-            clipRule="evenodd"
-          />
-        </svg>
+      <div className="max-w-6xl mx-auto relative z-10">
+        <div className="grid lg:grid-cols-2 gap-20 items-center">
+
+          {/* Left — copy */}
+          <div>
+            <span className="text-xs font-semibold text-emerald-400 tracking-widest uppercase">How it Works</span>
+            <h2 className="text-4xl md:text-5xl font-bold text-white mt-3 mb-6 leading-tight">
+              From signup<br />
+              <span className="text-white/30">to dispatch in minutes.</span>
+            </h2>
+            <p className="text-white/40 text-base leading-relaxed mb-10 max-w-md">
+              CargoXpress automates the hard part of logistics — finding trucks with spare capacity that match your route and cargo weight.
+            </p>
+
+            {!user && (
+              <Link to="/login">
+                <button className="group flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl transition-all shadow-lg shadow-emerald-500/20 hover:-translate-y-0.5">
+                  Get Started Free
+                  <span className="group-hover:translate-x-0.5 transition-transform inline-block">→</span>
+                </button>
+              </Link>
+            )}
+            {isTrader && (
+              <Link to="/traderRequest">
+                <button className="group flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl transition-all shadow-lg shadow-emerald-500/20 hover:-translate-y-0.5">
+                  Request a Delivery →
+                </button>
+              </Link>
+            )}
+            {isCompany && (
+              <Link to="/truck">
+                <button className="group flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl transition-all shadow-lg shadow-emerald-500/20 hover:-translate-y-0.5">
+                  Add Your Truck →
+                </button>
+              </Link>
+            )}
+            {isAdmin && (
+              <Link to="/admin">
+                <button className="group flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl transition-all shadow-lg shadow-emerald-500/20 hover:-translate-y-0.5">
+                  Open Dashboard →
+                </button>
+              </Link>
+            )}
+          </div>
+
+          {/* Right — step list */}
+          <div className="space-y-0">
+            {steps.map((step, i) => {
+              const Icon = step.icon;
+              const isLast = i === steps.length - 1;
+              return (
+                <div key={i} className="flex gap-4 group">
+                  {/* connector column */}
+                  <div className="flex flex-col items-center">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-500/20 transition-all">
+                      <Icon className="h-4 w-4 text-emerald-400" />
+                    </div>
+                    {!isLast && <div className="w-px flex-1 bg-gradient-to-b from-emerald-500/20 to-transparent my-2" />}
+                  </div>
+                  {/* content */}
+                  <div className={`pb-8 ${isLast ? '' : ''}`}>
+                    <span className="text-xs font-semibold text-emerald-500/60 tracking-wider">{step.tag}</span>
+                    <h3 className="text-white font-semibold mt-0.5 mb-1">{step.label}</h3>
+                    <p className="text-white/40 text-sm leading-relaxed">{step.desc}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
-      <hr className="bg-green-600 h-1" />
-    </li>
+    </section>
+  );
+};
 
-    <li>
-      <hr className="bg-green-600 h-1" />
-      <div className="timeline-middle">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          className="text-green-600 h-8 w-8"
-        >
-          <path
-            fillRule="evenodd"
-            d="M12 22a10 10 0 100-20 10 10 0 000 20zm4.5-12.5a1 1 0 00-1.6-1.2L9.5 14l-2.1-2.1a1 1 0 10-1.4 1.4l3 3a1 1 0 001.5-.1l5-6z"
-            clipRule="evenodd"
-          />
-        </svg>
-      </div>
-      <div className="timeline-end timeline-box font-semibold text-lg">
-        Add Truck
-      </div>
-      <hr className="bg-green-600 h-1" />
-    </li>
-
-    <li>
-      <hr className="bg-green-600 h-1" />
-      <div className="timeline-start timeline-box font-semibold text-lg">Schedule Route</div>
-      <div className="timeline-middle">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          className="text-green-600 h-8 w-8"
-        >
-          <path
-            fillRule="evenodd"
-            d="M12 22a10 10 0 100-20 10 10 0 000 20zm4.5-12.5a1 1 0 00-1.6-1.2L9.5 14l-2.1-2.1a1 1 0 10-1.4 1.4l3 3a1 1 0 001.5-.1l5-6z"
-            clipRule="evenodd"
-          />
-        </svg>
-      </div>
-      <hr className="bg-green-600 h-1" />
-    </li>
-
-    <li>
-      <hr className="bg-green-600 h-1" />
-      <div className="timeline-middle">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          className="text-green-600 h-8 w-8"
-        >
-          <path
-            fillRule="evenodd"
-            d="M12 22a10 10 0 100-20 10 10 0 000 20zm4.5-12.5a1 1 0 00-1.6-1.2L9.5 14l-2.1-2.1a1 1 0 10-1.4 1.4l3 3a1 1 0 001.5-.1l5-6z"
-            clipRule="evenodd"
-          />
-        </svg>
-      </div>
-      <div className="timeline-end timeline-box font-semibold text-lg">Merge Trucks</div>
-      <hr className="bg-gray-500 h-1" />
-    </li>
-
-    <li>
-      <hr className="bg-gray-500 h-1" />
-      <div className="timeline-start timeline-box font-semibold text-lg">Dispatch Trucks</div>
-      <div className="timeline-middle">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          className="text-gray-600 h-8 w-8"
-        >
-          <path
-            fillRule="evenodd"
-            d="M12 22a10 10 0 100-20 10 10 0 000 20zm4.5-12.5a1 1 0 00-1.6-1.2L9.5 14l-2.1-2.1a1 1 0 10-1.4 1.4l3 3a1 1 0 001.5-.1l5-6z"
-            clipRule="evenodd"
-          />
-        </svg>
-      </div>
-    </li>
-  </ul>
-</div>
-
-
-
-<div className="flex flex-col items-center mt-6">
-<Link to="/traderRequest">
-  <button className="btn btn-outline btn-success text-lg px-6 py-3 shadow-md hover:scale-105 transition-transform">
-    Schedule
-  </button>
-</Link>
-  <p className="mt-5 text-lg font-semibold text-gray-500">
-    Schedule Your Route Today!
-  </p>
-</div>
-
-    </div>
-  )
-}
-
-export default About
+export default About;

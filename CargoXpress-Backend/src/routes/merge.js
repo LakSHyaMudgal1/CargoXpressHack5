@@ -204,6 +204,11 @@ mergeRouter.get('/mergedSchedule', adminAuth, async (req, res) => {
             let finalSource = allStops[0];
             let finalDestination = allStops[allStops.length - 1];
 
+            // Skip pairs where no route stops exist
+            if (!finalSource || !finalDestination) {
+                continue;
+            }
+
             mergedSchedules.push({
                 transportationTruckId: finalTruck._id.toString(),
                 transportationTruckLicensePlate: finalTruck.licensePlate,

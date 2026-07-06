@@ -32,4 +32,4 @@ npm run dev
 - **Email ID:** sanchita@gmail.com  
 - **Password:** Sanchita@123  
 
-🚀 Get started with CargoXpress and optimize your logistics efficiently!
+ Get started with CargoXpress and optimize your logistics efficiently!
