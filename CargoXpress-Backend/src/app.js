@@ -64,15 +64,7 @@ app.use('/', mergedTraderRouter);
 
 // Vercel Serverless Handler
 if (isVercel) {
-  module.exports = async (req, res) => {
-    try {
-      if (mongoose.connection.readyState === 0) await connectDB();
-      return app(req, res);
-    } catch (err) {
-      console.error("Vercel API Error:", err);
-      res.status(500).json({ error: "Internal Server Error" });
-    }
-  };
+  module.exports = app;
 } else {
   // Local Development Mode
   connectDB()
