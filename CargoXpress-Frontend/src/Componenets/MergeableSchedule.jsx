@@ -1,11 +1,15 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { BASE_URL } from "../utils/constants";
-import { Truck, MapPin, Loader2, GitMerge } from "lucide-react";
+import { Truck, MapPin, Loader2, GitMerge, Check, X } from "lucide-react";
+import Pagination from "./Pagination";
 
 const MergeableSchedule = () => {
   const [mergeablePairs, setMergeablePairs] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const HandleMergeablePairs = async () => {
     try {
@@ -19,6 +23,68 @@ const MergeableSchedule = () => {
       setMergeablePairs([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAcceptPair = async (pairId, index) => {
+    try {
+      console.log("Accepting pair with ID:", pairId);
+      setActionLoading(prev => ({ ...prev, [`accept-${index}`]: true }));
+      const response = await axios.post(BASE_URL + `/acceptPair/${pairId}`, {}, {
+        withCredentials: true,
+      });
+      console.log("Accept response:", response.data);
+      
+      // Remove the pair from the list
+      setMergeablePairs(prev => prev.filter((_, i) => i !== index));
+      alert("Truck merge accepted! One truck will dispatch with combined load, other is now a free truck.");
+    } catch (err) {
+      console.error("Error accepting pair:", err);
+      console.error("Error details:", err.response?.data);
+      const errorMsg = err.response?.data?.error || err.message || "Unknown error";
+      alert(`Failed to accept merge: ${errorMsg}`);
+    } finally {
+      setActionLoading(prev => ({ ...prev, [`accept-${index}`]: false }));
+    }
+  };
+
+  const handleRejectPair = async (pairId, index) => {
+    try {
+      console.log("Rejecting pair with ID:", pairId);
+      setActionLoading(prev => ({ ...prev, [`reject-${index}`]: true }));
+      const response = await axios.delete(BASE_URL + `/rejectPair/${pairId}`, {
+        withCredentials: true,
+      });
+      console.log("Reject response:", response.data);
+      
+      // Remove the pair from the list
+      setMergeablePairs(prev => prev.filter((_, i) => i !== index));
+      alert("Truck merge rejected. Both trucks will dispatch separately.");
+    } catch (err) {
+      console.error("Error rejecting pair:", err);
+      console.error("Error details:", err.response?.data);
+      const errorMsg = err.response?.data?.error || err.message || "Unknown error";
+      alert(`Failed to reject merge: ${errorMsg}`);
+    } finally {
+      setActionLoading(prev => ({ ...prev, [`reject-${index}`]: false }));
+    }
+  };
+
+  const handleMergeAll = async () => {
+    try {
+      setActionLoading(prev => ({ ...prev, mergeAll: true }));
+      const res = await axios.post(BASE_URL + "/mergeAllPairs", {}, {
+        withCredentials: true,
+      });
+      
+      alert(res.data.message || "All pairs merged successfully!");
+      // Clear the list
+      setMergeablePairs([]);
+    } catch (err) {
+      console.error("Error merging all:", err);
+      alert("Failed to merge all pairs. Please try again.");
+    } finally {
+      setActionLoading(prev => ({ ...prev, mergeAll: false }));
     }
   };
 
@@ -37,8 +103,8 @@ const MergeableSchedule = () => {
           </p>
         </div>
 
-        {/* Action Button */}
-        <div className="flex justify-center mb-10">
+        {/* Action Buttons */}
+        <div className="flex justify-center gap-4 mb-10">
           <button
             className={`bg-emerald-500 hover:bg-emerald-400 text-white font-semibold py-3.5 px-8 rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-3 ${loading ? "opacity-80 cursor-wait" : "hover:-translate-y-0.5 active:translate-y-0"}`}
             onClick={HandleMergeablePairs}
@@ -47,24 +113,68 @@ const MergeableSchedule = () => {
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Truck className="w-5 h-5" />}
             {loading ? "Analyzing Routes..." : "Find Mergeable Routes"}
           </button>
+
+          {mergeablePairs !== null && mergeablePairs.length > 0 && (
+            <button
+              className={`bg-blue-500 hover:bg-blue-400 text-white font-semibold py-3.5 px-8 rounded-xl shadow-lg shadow-blue-500/20 transition-all flex items-center gap-3 ${actionLoading.mergeAll ? "opacity-80 cursor-wait" : "hover:-translate-y-0.5 active:translate-y-0"}`}
+              onClick={handleMergeAll}
+              disabled={actionLoading.mergeAll}
+            >
+              {actionLoading.mergeAll ? <Loader2 className="w-5 h-5 animate-spin" /> : <GitMerge className="w-5 h-5" />}
+              {actionLoading.mergeAll ? "Merging All..." : "Merge All"}
+            </button>
+          )}
         </div>
 
         {/* Results */}
         {mergeablePairs !== null && (
-          <div className="space-y-8">
+          <div id="mergeable-routes" className="space-y-8">
             {mergeablePairs.length > 0 ? (
-              mergeablePairs.map((pair, index) => (
-                <div
-                  key={index}
-                  className="rounded-2xl bg-white/3 border border-white/5 hover:border-white/10 transition-all overflow-hidden"
-                >
-                  {/* Card Header */}
-                  <div className="px-6 py-4 border-b border-white/5 flex items-center gap-3">
-                    <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                      <GitMerge className="w-4 h-4 text-emerald-400" />
-                    </div>
-                    <h3 className="text-lg font-bold text-white">Route Combination {index + 1}</h3>
-                  </div>
+              <>
+                {mergeablePairs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((pair, index) => {
+                  const actualIndex = (currentPage - 1) * itemsPerPage + index;
+                  return (
+                    <div
+                      key={pair._id || actualIndex}
+                      className="rounded-2xl bg-white/3 border border-white/5 hover:border-white/10 transition-all overflow-hidden"
+                    >
+                      {/* Card Header with Actions */}
+                      <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                            <GitMerge className="w-4 h-4 text-emerald-400" />
+                          </div>
+                          <h3 className="text-lg font-bold text-white">Route Combination {actualIndex + 1}</h3>
+                        </div>
+                        
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleAcceptPair(pair._id, actualIndex)}
+                            disabled={actionLoading[`accept-${actualIndex}`] || actionLoading[`reject-${actualIndex}`]}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-all text-sm font-medium ${actionLoading[`accept-${actualIndex}`] ? "opacity-50 cursor-wait" : ""}`}
+                          >
+                            {actionLoading[`accept-${actualIndex}`] ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Check className="w-4 h-4" />
+                            )}
+                            Accept
+                          </button>
+                          <button
+                            onClick={() => handleRejectPair(pair._id, actualIndex)}
+                            disabled={actionLoading[`accept-${actualIndex}`] || actionLoading[`reject-${actualIndex}`]}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all text-sm font-medium ${actionLoading[`reject-${actualIndex}`] ? "opacity-50 cursor-wait" : ""}`}
+                          >
+                            {actionLoading[`reject-${actualIndex}`] ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <X className="w-4 h-4" />
+                            )}
+                            Reject
+                          </button>
+                        </div>
+                      </div>
 
                   <div className="grid lg:grid-cols-2 gap-0">
                     {[{
@@ -90,7 +200,7 @@ const MergeableSchedule = () => {
 
                         {/* Stops Timeline */}
                         <div className="relative pl-6 space-y-3">
-                          {truck.stops.map((stop, stopIndex) => (
+                          {truck.stops && truck.stops.map((stop, stopIndex) => (
                             <div key={stopIndex} className="relative">
                               {/* Connector line */}
                               {stopIndex !== truck.stops.length - 1 && (
@@ -114,7 +224,17 @@ const MergeableSchedule = () => {
                     ))}
                   </div>
                 </div>
-              ))
+              );
+            })}
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={Math.ceil(mergeablePairs.length / itemsPerPage)}
+                  onPageChange={(page) => {
+                    setCurrentPage(page);
+                    document.getElementById('mergeable-routes')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                />
+              </>
             ) : (
               <div className="text-center py-16 rounded-2xl bg-white/3 border border-white/5">
                 <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/8 flex items-center justify-center mx-auto mb-4">

@@ -29,6 +29,11 @@ const mergedScheduleSchema = new Schema({
     finalRemainingLoad: {
         type: [Number], 
         required: true
+    },
+    status: {
+        type: String,
+        enum: ['accepted', 'rejected'],
+        default: 'accepted'
     }
 }, { timestamps: true });
 

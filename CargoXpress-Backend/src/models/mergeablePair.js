@@ -26,6 +26,6 @@ const mergeablePairSchema=new Schema ({
     truckTwoStops:{
         type:[String]
     }
-})
+}, { timestamps: true });
 
 module.exports= mongoose.model('MergeablePair', mergeablePairSchema);

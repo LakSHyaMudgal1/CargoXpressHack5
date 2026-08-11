@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import Navbar from './Navbar';
-import { Outlet } from 'react-router';
+import { Outlet } from 'react-router-dom';
 import FooterSec from './Footer';
 import ParticleBackground from './ParticleBackground';
 import axios from 'axios';

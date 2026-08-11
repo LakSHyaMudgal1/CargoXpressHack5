@@ -2,35 +2,36 @@ const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
 const mergeableTraderSchema = new Schema({
+    traderRequestId: {
+        type: String,
+    },
     traderId: {
         type: mongoose.Schema.Types.ObjectId,
-        // required: true,
         ref: "Trader"
     },
-    truckId: { 
+    truckId: {
         type: String,
-        // required: true
     },
     licensePlate: {
         type: String,
-        // required: true
     },
     load: {
         type: [Number],
-        // required: true
     },
     source: {
         type: String,
-        // required: true
     },
     destination: {
         type: String,
-        // required: true
     },
     stops: {
         type: [String],
-        // required: true
     },
-});
+    status: {
+        type: String,
+        enum: ['accepted', 'rejected'],
+        default: 'accepted'
+    }
+}, { timestamps: true });
 
 module.exports = mongoose.model("MergeableTrader", mergeableTraderSchema);
