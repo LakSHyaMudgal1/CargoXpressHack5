@@ -70,6 +70,8 @@ profileRouter.put('/profile/companyEdit',companyAuth, async(req, res)=>{
         res.status(400).send("There is some error"+ err);
     }
 })
+
+
 profileRouter.put('/profile/traderEdit', traderAuth, async (req, res) => {
     try {
       validateEditData(req);
