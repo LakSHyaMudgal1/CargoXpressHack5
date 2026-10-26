@@ -1,11 +1,23 @@
 const jwt=require('jsonwebtoken');
-const TransportCompany= require('../models/transportCompany')
+const TransportCompany= require('../models/transportCompany');
 const Admin= require('../models/admin');
 const Trader= require('../models/trader');
+const Driver= require('../models/driver');
+
+const extractToken = (req) => {
+    if (req.cookies && req.cookies.token) {
+        return req.cookies.token;
+    }
+    const authHeader = req.headers && (req.headers.authorization || req.headers.Authorization);
+    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+        return authHeader.substring(7).trim();
+    }
+    return null;
+};
 
 const companyAuth= async (req, res, next)=>{
     try{
-    const {token}=req.cookies;
+    const token=extractToken(req);
     if(!token){
         return res.status(401).send("Kindly Login")
     }
@@ -31,7 +43,7 @@ const companyAuth= async (req, res, next)=>{
 
 const adminAuth= async (req, res, next)=>{
     try{
-    const {token}=req.cookies;
+    const token=extractToken(req);
     if(!token){
         return res.status(401).send("Kindly Login")
     }
@@ -57,7 +69,7 @@ const adminAuth= async (req, res, next)=>{
 
 const traderAuth= async (req, res, next)=>{
     try{
-    const {token}=req.cookies;
+    const token=extractToken(req);
     if(!token){
         return res.status(401).send("Kindly Login")
     }
@@ -81,4 +93,39 @@ const traderAuth= async (req, res, next)=>{
     }
 }
 
-module.exports={companyAuth, adminAuth, traderAuth};
+const driverAuth= async (req, res, next)=>{
+    try{
+    const token=extractToken(req);
+    if(!token){
+        return res.status(401).send("Kindly Login");
+    }
+    const decodedData=await jwt.verify(token, process.env.JWT_SECRET);
+    const {_id, role}=decodedData;
+
+    if(role !== 'driver') {
+        return res.status(403).send("Access denied. Driver role required.");
+    }
+
+    const driver= await Driver.findById(_id);
+    if(!driver){
+        throw new Error("Driver not found");
+    }
+
+    if (driver.status === 'disabled') {
+        return res.status(403).send("Driver account is disabled. Contact your transport company.");
+    }
+
+    req.user = {
+        id: _id,
+        role: role,
+        companyId: driver.companyId
+    };
+    req.driver=driver;
+    next();
+}
+    catch(err){
+        res.status(400).send("There is some error"+ err);
+    }
+}
+
+module.exports={companyAuth, adminAuth, traderAuth, driverAuth, extractToken};

@@ -1,17 +1,18 @@
 const express= require('express');
 const profileRouter=express.Router();
 const {validateEditData}= require('../utils/validation')
-const {companyAuth, traderAuth} =  require('../middlewares/auth');
+const {companyAuth, traderAuth, extractToken} =  require('../middlewares/auth');
 const TransportCompany = require('../models/transportCompany');
 const Trader = require('../models/trader');
 const Admin = require('../models/admin');
+const Driver = require('../models/driver');
 const jwt = require('jsonwebtoken');
 
 
 // Unified endpoint to rehydrate user state on page refresh
 profileRouter.get('/me', async (req, res) => {
     try {
-        const { token } = req.cookies;
+        const token = extractToken(req);
         if (!token) return res.status(401).json({ message: "Not authenticated" });
 
         const decodedData = jwt.verify(token, process.env.JWT_SECRET);
@@ -24,6 +25,11 @@ profileRouter.get('/me', async (req, res) => {
             user = await Trader.findById(_id);
         } else if (role === 'admin') {
             user = await Admin.findById(_id);
+        } else if (role === 'driver') {
+            user = await Driver.findById(_id);
+            if (user && user.status === 'disabled') {
+                return res.status(403).json({ message: "Driver account is disabled. Contact your transport company." });
+            }
         }
 
         if (!user) return res.status(404).json({ message: "User not found" });

@@ -11,6 +11,7 @@ const authRouter = require("./routes/auth");
 const scheduleDeliveryRouter = require("./routes/scheduleDelivery");
 const mergeRouter = require("./routes/merge");
 const viewCompanyRouter = require("./routes/viewCompany");
+const driverRouter = require("./routes/driver");
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -60,6 +61,7 @@ app.use("/", scheduleDeliveryRouter);
 app.use("/", viewCompanyRouter);
 app.use("/", mergeRouter);
 app.use('/', mergedTraderRouter);
+app.use('/', driverRouter);
 
 
 // Vercel Serverless Handler
