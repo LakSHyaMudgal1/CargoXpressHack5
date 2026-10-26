@@ -10,6 +10,7 @@ const MergedSchedule = require('../models/mergedSchedule');
 const MergeablePair = require('../models/mergeablePair');
 const TransportCompany = require('../models/transportCompany');
 const MergeDecisionLog = require('../models/mergeDecisionLog');
+const DriverLocation = require('../models/driverLocation');
 const { executeAcceptPair, buildMergedData } = require('./merge');
 
 const { driverAuth, companyAuth, adminAuth } = require('../middlewares/auth');
@@ -815,6 +816,338 @@ driverRouter.patch('/company/drivers/:driverId/status', companyAuth, async (req,
         });
     } catch (err) {
         res.status(500).json({ message: "Status update failed: " + err.message });
+    }
+});
+
+// ─── DRIVER GPS LOCATION TRACKING ENDPOINTS ───────────────────────────────────
+
+/**
+ * POST /driver/location
+ * Authenticated GPS ingest endpoint for drivers on active trips.
+ * Supports single location reports and offline queued batch arrays.
+ */
+driverRouter.post('/driver/location', driverAuth, async (req, res) => {
+    try {
+        // 1. Verify driver has an active truck assignment
+        const activeAssignment = await DriverAssignment.getActiveForDriver(req.driver._id);
+        if (!activeAssignment || !activeAssignment.truckId) {
+            return res.status(403).json({
+                message: "Access denied. You have no active vehicle assignment authorized for tracking."
+            });
+        }
+
+        const assignedTruck = activeAssignment.truckId;
+        const assignedTruckIdStr = assignedTruck._id.toString();
+
+        // 2. Verify active delivery or route for this assigned truck
+        let activeTrip = await MergedSchedule.findOne({
+            transportationTruckId: assignedTruckIdStr,
+            status: 'accepted'
+        });
+        let tripType = 'MergedSchedule';
+
+        if (!activeTrip) {
+            activeTrip = await Route.findOne({ truckId: assignedTruckIdStr });
+            tripType = 'Route';
+        }
+
+        if (!activeTrip) {
+            return res.status(403).json({
+                message: "Access denied. Your assigned vehicle has no active trip or route scheduled for tracking."
+            });
+        }
+
+        // 3. If client sends tripId or truckId in body, verify it matches the authenticated driver's assignment
+        const providedTripId = req.body.tripId || (Array.isArray(req.body.locations) && req.body.locations[0]?.tripId);
+        if (providedTripId && providedTripId.toString() !== activeTrip._id.toString()) {
+            return res.status(403).json({
+                message: "Access denied. Submitted trip ID does not match your assigned active trip."
+            });
+        }
+
+        const providedTruckId = req.body.truckId || (Array.isArray(req.body.locations) && req.body.locations[0]?.truckId);
+        if (providedTruckId && providedTruckId.toString() !== assignedTruckIdStr) {
+            return res.status(403).json({
+                message: "Access denied. Submitted truck ID does not match your authorized vehicle."
+            });
+        }
+
+        // 4. Normalize single or batch location payloads
+        const rawPoints = Array.isArray(req.body.locations)
+            ? req.body.locations
+            : [req.body];
+
+        if (!rawPoints.length || (rawPoints.length === 1 && !rawPoints[0].latitude && rawPoints[0].latitude !== 0)) {
+            return res.status(400).json({ message: "No valid location data provided in request body." });
+        }
+
+        const nowMs = Date.now();
+        const maxFutureMs = nowMs + (5 * 60 * 1000); // Max 5 mins in future for device clock skew
+        const maxPastMs = nowMs - (24 * 60 * 60 * 1000); // Max 24 hours in past
+
+        const newLocationsToInsert = [];
+
+        for (let i = 0; i < rawPoints.length; i++) {
+            const pt = rawPoints[i];
+            const lat = Number(pt.latitude);
+            const lng = Number(pt.longitude);
+
+            // Coordinate range validation
+            if (isNaN(lat) || lat < -90 || lat > 90) {
+                return res.status(400).json({
+                    message: `Invalid latitude value "${pt.latitude}" at index ${i}. Must be a number between -90 and 90.`
+                });
+            }
+
+            if (isNaN(lng) || lng < -180 || lng > 180) {
+                return res.status(400).json({
+                    message: `Invalid longitude value "${pt.longitude}" at index ${i}. Must be a number between -180 and 180.`
+                });
+            }
+
+            // Timestamp validation
+            const rawTs = pt.timestamp || pt.deviceTimestamp || pt.time;
+            if (!rawTs) {
+                return res.status(400).json({
+                    message: `Device timestamp is required for location point at index ${i}.`
+                });
+            }
+
+            const deviceDate = new Date(rawTs);
+            const deviceMs = deviceDate.getTime();
+
+            if (isNaN(deviceMs)) {
+                return res.status(400).json({
+                    message: `Invalid timestamp format "${rawTs}" at index ${i}.`
+                });
+            }
+
+            if (deviceMs > maxFutureMs) {
+                return res.status(400).json({
+                    message: `Timestamp is implausible (in the future) at index ${i}.`
+                });
+            }
+
+            if (deviceMs < maxPastMs) {
+                return res.status(400).json({
+                    message: `Timestamp is stale (exceeds 24 hours retention threshold) at index ${i}.`
+                });
+            }
+
+            // Accuracy validation
+            const accuracy = (pt.accuracy !== undefined && pt.accuracy !== null && !isNaN(Number(pt.accuracy)))
+                ? Math.max(0, Number(pt.accuracy))
+                : null;
+
+            // Speed validation
+            const speed = (pt.speed !== undefined && pt.speed !== null && !isNaN(Number(pt.speed)))
+                ? Math.max(0, Number(pt.speed))
+                : null;
+
+            // Heading validation
+            const heading = (pt.heading !== undefined && pt.heading !== null && !isNaN(Number(pt.heading)))
+                ? Number(pt.heading)
+                : null;
+
+            // Altitude validation
+            const altitude = (pt.altitude !== undefined && pt.altitude !== null && !isNaN(Number(pt.altitude)))
+                ? Number(pt.altitude)
+                : null;
+
+            // Deduplication: Avoid duplicate insertion of identical device timestamp for this driver
+            const duplicate = await DriverLocation.exists({
+                driverId: req.driver._id,
+                deviceTimestamp: deviceDate
+            });
+
+            if (!duplicate) {
+                newLocationsToInsert.push({
+                    driverId: req.driver._id,
+                    driverName: req.driver.name,
+                    truckId: assignedTruck._id,
+                    truckLicensePlate: assignedTruck.licensePlate,
+                    tripId: activeTrip._id,
+                    tripType,
+                    latitude: lat,
+                    longitude: lng,
+                    location: {
+                        type: 'Point',
+                        coordinates: [lng, lat]
+                    },
+                    accuracy,
+                    speed,
+                    heading,
+                    altitude,
+                    deviceTimestamp: deviceDate,
+                    serverTimestamp: new Date()
+                });
+            }
+        }
+
+        if (newLocationsToInsert.length > 0) {
+            await DriverLocation.insertMany(newLocationsToInsert);
+        }
+
+        const latestSaved = newLocationsToInsert[newLocationsToInsert.length - 1];
+
+        res.status(200).json({
+            message: "Location updates processed successfully",
+            recordedCount: newLocationsToInsert.length,
+            totalSubmitted: rawPoints.length,
+            trip: {
+                id: activeTrip._id,
+                type: tripType,
+                truckLicensePlate: assignedTruck.licensePlate
+            },
+            latest: latestSaved ? {
+                latitude: latestSaved.latitude,
+                longitude: latestSaved.longitude,
+                accuracy: latestSaved.accuracy,
+                deviceTimestamp: latestSaved.deviceTimestamp
+            } : null
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to record location update: " + err.message });
+    }
+});
+
+/**
+ * GET /driver/location/latest
+ * Retrieves the current driver's last recorded GPS coordinates for their active haul.
+ */
+driverRouter.get('/driver/location/latest', driverAuth, async (req, res) => {
+    try {
+        const latest = await DriverLocation.findOne({ driverId: req.driver._id })
+            .sort({ deviceTimestamp: -1 });
+
+        if (!latest) {
+            return res.json({
+                location: null,
+                message: "No location records available for your profile."
+            });
+        }
+
+        res.json({
+            location: {
+                latitude: latest.latitude,
+                longitude: latest.longitude,
+                accuracy: latest.accuracy,
+                speed: latest.speed,
+                heading: latest.heading,
+                altitude: latest.altitude,
+                deviceTimestamp: latest.deviceTimestamp,
+                serverTimestamp: latest.serverTimestamp,
+                truckLicensePlate: latest.truckLicensePlate,
+                tripId: latest.tripId
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to fetch latest location: " + err.message });
+    }
+});
+
+/**
+ * GET /admin/driver-locations
+ * Central dispatch overview: Retrieves the latest GPS coordinate for all actively tracking drivers.
+ */
+driverRouter.get('/admin/driver-locations', adminAuth, async (req, res) => {
+    try {
+        const activeAssignments = await DriverAssignment.find({ status: 'active' })
+            .populate('driverId')
+            .populate('truckId');
+
+        const fleetLocations = [];
+        const now = Date.now();
+
+        for (const assignment of activeAssignments) {
+            if (!assignment.driverId || !assignment.truckId) continue;
+
+            const latest = await DriverLocation.findOne({ driverId: assignment.driverId._id })
+                .sort({ deviceTimestamp: -1 });
+
+            let freshnessMinutes = null;
+            let freshnessStatus = 'no_signal';
+
+            if (latest && latest.deviceTimestamp) {
+                const diffMs = Math.max(0, now - new Date(latest.deviceTimestamp).getTime());
+                freshnessMinutes = Math.round(diffMs / (60 * 1000));
+                if (freshnessMinutes <= 10) {
+                    freshnessStatus = 'live';
+                } else if (freshnessMinutes <= 60) {
+                    freshnessStatus = 'recent';
+                } else {
+                    freshnessStatus = 'stale';
+                }
+            }
+
+            fleetLocations.push({
+                assignmentId: assignment._id,
+                driver: {
+                    id: assignment.driverId._id,
+                    name: assignment.driverId.name,
+                    phone: assignment.driverId.phone
+                },
+                truck: {
+                    id: assignment.truckId._id,
+                    licensePlate: assignment.truckId.licensePlate
+                },
+                latestLocation: latest ? {
+                    latitude: latest.latitude,
+                    longitude: latest.longitude,
+                    accuracy: latest.accuracy,
+                    speed: latest.speed,
+                    heading: latest.heading,
+                    deviceTimestamp: latest.deviceTimestamp,
+                    serverTimestamp: latest.serverTimestamp,
+                    tripId: latest.tripId,
+                    tripType: latest.tripType,
+                    freshnessMinutes,
+                    freshnessStatus
+                } : null
+            });
+        }
+
+        res.json({ drivers: fleetLocations });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to fetch fleet locations: " + err.message });
+    }
+});
+
+/**
+ * GET /admin/driver-locations/:driverId/history
+ * Central dispatch breadcrumbs: Retrieves recent GPS trail for an authorized driver's trip.
+ */
+driverRouter.get('/admin/driver-locations/:driverId/history', adminAuth, async (req, res) => {
+    try {
+        const { driverId } = req.params;
+        const limit = Math.min(500, Math.max(1, parseInt(req.query.limit || '100', 10)));
+
+        if (!mongoose.Types.ObjectId.isValid(driverId)) {
+            return res.status(400).json({ message: "Invalid driver ID format" });
+        }
+
+        const history = await DriverLocation.find({ driverId })
+            .sort({ deviceTimestamp: -1 })
+            .limit(limit);
+
+        res.json({
+            driverId,
+            count: history.length,
+            history: history.map(h => ({
+                id: h._id,
+                latitude: h.latitude,
+                longitude: h.longitude,
+                accuracy: h.accuracy,
+                speed: h.speed,
+                heading: h.heading,
+                altitude: h.altitude,
+                deviceTimestamp: h.deviceTimestamp,
+                serverTimestamp: h.serverTimestamp,
+                tripId: h.tripId
+            }))
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to fetch driver location history: " + err.message });
     }
 });
 

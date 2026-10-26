@@ -17,6 +17,7 @@ import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { StopTimeline } from '../../components/StopTimeline';
 import { ManifestCard } from '../../components/ManifestCard';
+import { TrackingCard } from '../../components/TrackingCard';
 import { EmptyState } from '../../components/EmptyState';
 import { ActiveTripResponse } from '../../types/trip';
 
@@ -135,6 +136,17 @@ export const ActiveTripScreen: React.FC = () => {
                 </View>
               </View>
             </Card>
+
+            {/* Live GPS Fleet Tracking Controls & Telemetry */}
+            {truck && (
+              <TrackingCard
+                tripId={trip.id}
+                truckId={truck.id}
+                truckLicensePlate={truck.licensePlate}
+                origin={trip.origin}
+                destination={trip.destination}
+              />
+            )}
 
             {/* Ordered Stops Section */}
             <Card style={styles.sectionCard}>

@@ -181,7 +181,6 @@ describe('Driver App Backend Foundation & Assignment Test Suite', () => {
             }
             await new Promise(resolve => server.close(resolve));
         }
-        await mongoose.disconnect();
     });
 
     // ── 1. DRIVER AUTHENTICATION ──────────────────────────────────────────────
