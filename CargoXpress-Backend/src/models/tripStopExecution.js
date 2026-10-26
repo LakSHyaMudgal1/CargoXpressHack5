@@ -1,6 +1,67 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
+const deliveryAttemptSchema = new Schema({
+    attemptNumber: {
+        type: Number,
+        required: true
+    },
+    attemptType: {
+        type: String,
+        enum: ['full', 'partial', 'failed'],
+        required: true
+    },
+    deliveredWeightKg: {
+        type: Number,
+        default: 0
+    },
+    outstandingWeightKg: {
+        type: Number,
+        required: true
+    },
+    recipient: {
+        name: { type: String, default: null },
+        phone: { type: String, default: null },
+        notes: { type: String, default: null }
+    },
+    proofOfDelivery: {
+        type: {
+            type: String,
+            enum: ['otp', 'signature', 'photo', 'acknowledgement'],
+            default: 'acknowledgement'
+        },
+        verificationStatus: {
+            type: String,
+            enum: ['driver_reported', 'verified'],
+            default: 'driver_reported'
+        },
+        evidenceId: { type: String, default: null },
+        otpVerified: { type: Boolean, default: false },
+        submittedAt: { type: Date, default: Date.now }
+    },
+    failureReason: {
+        type: String,
+        default: null
+    },
+    driverId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Driver',
+        required: true
+    },
+    driverName: {
+        type: String,
+        required: true
+    },
+    requestId: {
+        type: String,
+        default: null
+    },
+    timestamp: {
+        type: Date,
+        default: Date.now
+    }
+}, { _id: true });
+
 const shipmentItemSchema = new Schema({
     shipmentId: {
         type: String,
@@ -27,6 +88,11 @@ const shipmentItemSchema = new Schema({
         type: Number,
         default: null
     },
+    outstandingWeightKg: {
+        type: Number,
+        default: null
+    },
+    deliveryAttempts: [deliveryAttemptSchema],
     operation: {
         type: String,
         enum: ['pickup', 'delivery'],
@@ -98,6 +164,7 @@ const stopTransitionAuditSchema = new Schema({
         fromStatus: { type: String },
         toStatus: { type: String },
         deliveredWeightKg: { type: Number, default: null },
+        outstandingWeightKg: { type: Number, default: null },
         failureReason: { type: String, default: null }
     }],
     metadata: {
@@ -117,6 +184,10 @@ const proofOfDeliverySchema = new Schema({
         enum: ['driver_reported', 'verified'],
         default: 'driver_reported' // Marked as driver-reported until independent verification
     },
+    evidenceId: {
+        type: String,
+        default: null
+    },
     otpCode: {
         type: String,
         default: null
@@ -130,6 +201,37 @@ const proofOfDeliverySchema = new Schema({
         default: null
     },
     submittedAt: {
+        type: Date,
+        default: null
+    }
+}, { _id: false });
+
+const otpVerificationSchema = new Schema({
+    hashedOtp: {
+        type: String,
+        default: null
+    },
+    salt: {
+        type: String,
+        default: null
+    },
+    expiresAt: {
+        type: Date,
+        default: null
+    },
+    attemptCount: {
+        type: Number,
+        default: 0
+    },
+    maxAttempts: {
+        type: Number,
+        default: 3
+    },
+    isVerified: {
+        type: Boolean,
+        default: false
+    },
+    verifiedAt: {
         type: Date,
         default: null
     }
@@ -183,6 +285,10 @@ const stopExecutionSchema = new Schema({
     shipments: [shipmentItemSchema],
     recipient: recipientSchema,
     proofOfDelivery: proofOfDeliverySchema,
+    otpVerification: {
+        type: otpVerificationSchema,
+        default: null
+    },
     arrivedAt: {
         type: Date,
         default: null
@@ -383,8 +489,11 @@ tripStopExecutionSchema.statics.getOrCreateExecution = async function({ tripId, 
                     reference: item.reference,
                     cargoDescription: `${item.shipmentType === 'trader_request' ? 'Trader Cargo' : 'Truck Cargo'} (${item.source} -> ${item.destination})`,
                     weightKg: item.weightKg,
+                    deliveredWeightKg: null,
+                    outstandingWeightKg: null,
                     operation: 'pickup',
-                    status: 'pending'
+                    status: 'pending',
+                    deliveryAttempts: []
                 });
             }
             if (item.destination === stopName) {
@@ -394,8 +503,11 @@ tripStopExecutionSchema.statics.getOrCreateExecution = async function({ tripId, 
                     reference: item.reference,
                     cargoDescription: `${item.shipmentType === 'trader_request' ? 'Trader Cargo' : 'Truck Cargo'} (${item.source} -> ${item.destination})`,
                     weightKg: item.weightKg,
+                    deliveredWeightKg: 0,
+                    outstandingWeightKg: item.weightKg,
                     operation: 'delivery',
-                    status: 'pending'
+                    status: 'pending',
+                    deliveryAttempts: []
                 });
             }
         }

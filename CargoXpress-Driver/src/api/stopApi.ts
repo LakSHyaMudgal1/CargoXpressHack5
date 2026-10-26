@@ -51,4 +51,53 @@ export const stopApi = {
       payload
     );
   },
+
+  /**
+   * Record a dedicated consignment delivery attempt (full, partial, or failed)
+   */
+  recordDeliveryAttempt: async (
+    stopIndex: number,
+    payload: import('../types/stop').DeliveryAttemptPayload
+  ): Promise<import('../types/stop').DeliveryAttemptResponse> => {
+    return await apiClient.post<import('../types/stop').DeliveryAttemptResponse>(
+      `/driver/active-trip/stops/${stopIndex}/delivery-attempt`,
+      payload
+    );
+  },
+
+  /**
+   * Request generation of a recipient OTP code for this stop
+   */
+  generateOtp: async (stopIndex: number): Promise<import('../types/stop').GenerateOtpResponse> => {
+    return await apiClient.post<import('../types/stop').GenerateOtpResponse>(
+      `/driver/active-trip/stops/${stopIndex}/generate-otp`,
+      {}
+    );
+  },
+
+  /**
+   * Verify recipient OTP code for delivery authorization
+   */
+  verifyOtp: async (
+    stopIndex: number,
+    otpCode: string
+  ): Promise<import('../types/stop').VerifyOtpResponse> => {
+    return await apiClient.post<import('../types/stop').VerifyOtpResponse>(
+      `/driver/active-trip/stops/${stopIndex}/verify-otp`,
+      { otpCode }
+    );
+  },
+
+  /**
+   * Securely upload delivery photo evidence
+   */
+  uploadEvidence: async (
+    stopIndex: number,
+    payload: import('../types/stop').UploadEvidencePayload
+  ): Promise<import('../types/stop').UploadEvidenceResponse> => {
+    return await apiClient.post<import('../types/stop').UploadEvidenceResponse>(
+      `/driver/active-trip/stops/${stopIndex}/evidence`,
+      payload
+    );
+  },
 };

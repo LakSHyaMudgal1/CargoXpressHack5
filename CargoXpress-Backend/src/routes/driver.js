@@ -13,9 +13,15 @@ const MergeDecisionLog = require('../models/mergeDecisionLog');
 const DriverLocation = require('../models/driverLocation');
 const TripStopExecution = require('../models/tripStopExecution');
 const TraderRequest = require('../models/traderRequest');
+const DeliveryEvidence = require('../models/deliveryEvidence');
+const evidenceStorage = require('../services/evidenceStorage');
+const otpService = require('../services/otpService');
 const { executeAcceptPair, buildMergedData } = require('./merge');
+const jwt = require('jsonwebtoken');
+const Admin = require('../models/admin');
+const Trader = require('../models/trader');
 
-const { driverAuth, companyAuth, adminAuth, traderAuth } = require('../middlewares/auth');
+const { driverAuth, companyAuth, adminAuth, traderAuth, extractToken } = require('../middlewares/auth');
 
 // ─── DRIVER SELF-SERVICE ENDPOINTS (Requires driverAuth) ─────────────────────
 
@@ -1253,9 +1259,11 @@ driverRouter.get('/driver/active-trip/stops', driverAuth, async (req, res) => {
                     cargoDescription: s.cargoDescription,
                     weightKg: s.weightKg,
                     deliveredWeightKg: s.deliveredWeightKg,
+                    outstandingWeightKg: s.outstandingWeightKg,
                     operation: s.operation,
                     status: s.status,
                     failureReason: s.failureReason,
+                    deliveryAttempts: s.deliveryAttempts || [],
                     completedAt: s.completedAt
                 })),
                 recipient: stop.recipient,
@@ -1488,7 +1496,7 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
             }
         }
 
-        // Verify that any shipments specified in shipmentUpdates actually belong to this stop
+        // Verify and validate shipments specified in shipmentUpdates
         if (Array.isArray(shipmentUpdates) && shipmentUpdates.length > 0) {
             for (const u of shipmentUpdates) {
                 const found = stop.shipments.find(s => s.shipmentId === u.shipmentId);
@@ -1496,6 +1504,25 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
                     return res.status(400).json({
                         message: `Shipment "${u.shipmentId}" is not associated with stop #${stopIndex + 1} ("${stop.stopName}").`
                     });
+                }
+                if (found.operation === 'delivery') {
+                    const currentOutstanding = (found.outstandingWeightKg !== null && found.outstandingWeightKg !== undefined)
+                        ? found.outstandingWeightKg
+                        : (found.weightKg - (found.deliveredWeightKg || 0));
+
+                    if (u.deliveredWeightKg !== undefined && u.deliveredWeightKg !== null) {
+                        const dw = Number(u.deliveredWeightKg);
+                        if (isNaN(dw) || dw < 0) {
+                            return res.status(400).json({
+                                message: `Delivered quantity cannot be negative for shipment "${u.shipmentId}".`
+                            });
+                        }
+                        if (dw > currentOutstanding) {
+                            return res.status(400).json({
+                                message: `Delivered quantity (${dw} kg) cannot exceed the outstanding quantity (${currentOutstanding} kg) for shipment "${u.shipmentId}".`
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -1536,6 +1563,39 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
             });
         }
 
+        // Proof of delivery verification prior to completion
+        if (status === 'completed' && proofOfDelivery && typeof proofOfDelivery === 'object') {
+            if (proofOfDelivery.type === 'otp') {
+                if (stop.otpVerification && stop.otpVerification.hashedOtp) {
+                    if (!stop.otpVerification.isVerified) {
+                        if (!proofOfDelivery.otpCode) {
+                            return res.status(400).json({
+                                message: "Recipient OTP code is required for OTP proof of delivery."
+                            });
+                        }
+                        const verifyRes = otpService.verifyOtp(proofOfDelivery.otpCode, stop.otpVerification);
+                        if (!verifyRes.success) {
+                            await execution.save();
+                            return res.status(400).json({
+                                message: verifyRes.message || "Invalid OTP code."
+                            });
+                        }
+                    }
+                } else if (!proofOfDelivery.otpCode) {
+                    return res.status(400).json({
+                        message: "Recipient OTP code is required for OTP proof of delivery."
+                    });
+                }
+            } else if (proofOfDelivery.type === 'photo' && proofOfDelivery.evidenceId) {
+                const evidenceDoc = await DeliveryEvidence.findOne({ evidenceId: proofOfDelivery.evidenceId });
+                if (!evidenceDoc) {
+                    return res.status(400).json({
+                        message: `Delivery evidence "${proofOfDelivery.evidenceId}" not found. Please upload evidence first.`
+                    });
+                }
+            }
+        }
+
         // Sequential integrity: Cannot execute stop if previous stop is unresolved
         if (stopIndex > 0) {
             for (let p = 0; p < stopIndex; p++) {
@@ -1558,16 +1618,37 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
         } else if (status === 'failed') {
             stop.failedAt = now;
             stop.failureReason = failureReason.trim();
-            // Mark all shipments at this stop as failed
+            // Mark all shipments at this stop as failed, recording failed attempt but preserving outstandingWeightKg
             stop.shipments.forEach(s => {
+                if (s.outstandingWeightKg === null || s.outstandingWeightKg === undefined) {
+                    s.outstandingWeightKg = s.weightKg - (s.deliveredWeightKg || 0);
+                }
+                s.deliveryAttempts = s.deliveryAttempts || [];
                 const prevSStatus = s.status;
                 s.status = 'failed';
                 s.failureReason = failureReason.trim();
+
+                if (s.operation === 'delivery') {
+                    s.deliveryAttempts.push({
+                        attemptNumber: s.deliveryAttempts.length + 1,
+                        attemptType: 'failed',
+                        deliveredWeightKg: 0,
+                        outstandingWeightKg: s.outstandingWeightKg,
+                        failureReason: failureReason.trim(),
+                        driverId: req.driver._id,
+                        driverName: req.driver.name,
+                        requestId: reqId,
+                        timestamp: now
+                    });
+                }
+
                 affectedShipments.push({
                     shipmentId: s.shipmentId,
                     operation: s.operation,
                     fromStatus: prevSStatus,
                     toStatus: 'failed',
+                    deliveredWeightKg: 0,
+                    outstandingWeightKg: s.outstandingWeightKg,
                     failureReason: failureReason.trim()
                 });
             });
@@ -1586,7 +1667,8 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
                     operation: 'pickup',
                     fromStatus: prevPStatus,
                     toStatus: 'loaded',
-                    deliveredWeightKg: null
+                    deliveredWeightKg: null,
+                    outstandingWeightKg: null
                 });
             }
 
@@ -1605,59 +1687,117 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
                     stop.proofOfDelivery = {
                         type: proofOfDelivery.type || 'acknowledgement',
                         verificationStatus: 'driver_reported', // Driver-reported until independent audit
+                        evidenceId: proofOfDelivery.evidenceId || null,
                         otpCode: proofOfDelivery.otpCode || null,
                         signatureData: proofOfDelivery.signatureData || null,
-                        photoReference: proofOfDelivery.photoReference || null,
+                        photoReference: proofOfDelivery.photoReference || proofOfDelivery.evidenceId || null,
                         submittedAt: now
                     };
                 }
 
                 for (const d of deliveries) {
+                    if (d.outstandingWeightKg === null || d.outstandingWeightKg === undefined) {
+                        d.outstandingWeightKg = d.weightKg - (d.deliveredWeightKg || 0);
+                    }
+                    d.deliveryAttempts = d.deliveryAttempts || [];
+
                     const prevDStatus = d.status;
                     const update = Array.isArray(shipmentUpdates)
                         ? shipmentUpdates.find(u => u.shipmentId === d.shipmentId)
                         : null;
 
                     if (update && (update.status === 'partial' || update.status === 'partially_delivered')) {
-                        const deliveredKg = Math.min(d.weightKg, Math.max(0, Number(update.deliveredWeightKg) || 0));
-                        d.status = 'partial';
-                        d.deliveredWeightKg = deliveredKg;
+                        const deliveredKg = Number(update.deliveredWeightKg) || 0;
+                        d.deliveredWeightKg = (d.deliveredWeightKg || 0) + deliveredKg;
+                        d.outstandingWeightKg = Math.max(0, d.outstandingWeightKg - deliveredKg);
+                        d.status = d.outstandingWeightKg === 0 ? 'delivered' : 'partial';
                         d.failureReason = update.failureReason || 'Partial consignment delivered';
                         d.completedAt = now;
                         execution.currentLoadOnBoard = Math.max(0, execution.currentLoadOnBoard - deliveredKg);
                         execution.totalDeliveredWeight += deliveredKg;
+
+                        d.deliveryAttempts.push({
+                            attemptNumber: d.deliveryAttempts.length + 1,
+                            attemptType: d.outstandingWeightKg === 0 ? 'full' : 'partial',
+                            deliveredWeightKg: deliveredKg,
+                            outstandingWeightKg: d.outstandingWeightKg,
+                            recipient: stop.recipient,
+                            proofOfDelivery: stop.proofOfDelivery,
+                            failureReason: d.failureReason,
+                            driverId: req.driver._id,
+                            driverName: req.driver.name,
+                            requestId: reqId,
+                            timestamp: now
+                        });
+
                         affectedShipments.push({
                             shipmentId: d.shipmentId,
                             operation: 'delivery',
                             fromStatus: prevDStatus,
-                            toStatus: 'partial',
+                            toStatus: d.status,
                             deliveredWeightKg: deliveredKg,
+                            outstandingWeightKg: d.outstandingWeightKg,
                             failureReason: d.failureReason
                         });
                     } else if (update && (update.status === 'failed' || update.status === 'delivery_failed')) {
                         d.status = 'failed';
                         d.failureReason = update.failureReason || 'Recipient refused delivery';
                         d.completedAt = now;
+                        // outstandingWeightKg remains intact
+
+                        d.deliveryAttempts.push({
+                            attemptNumber: d.deliveryAttempts.length + 1,
+                            attemptType: 'failed',
+                            deliveredWeightKg: 0,
+                            outstandingWeightKg: d.outstandingWeightKg,
+                            recipient: stop.recipient,
+                            proofOfDelivery: stop.proofOfDelivery,
+                            failureReason: d.failureReason,
+                            driverId: req.driver._id,
+                            driverName: req.driver.name,
+                            requestId: reqId,
+                            timestamp: now
+                        });
+
                         affectedShipments.push({
                             shipmentId: d.shipmentId,
                             operation: 'delivery',
                             fromStatus: prevDStatus,
                             toStatus: 'failed',
                             deliveredWeightKg: 0,
+                            outstandingWeightKg: d.outstandingWeightKg,
                             failureReason: d.failureReason
                         });
                     } else {
+                        // Full delivery
+                        const deliveredKg = d.outstandingWeightKg;
+                        d.deliveredWeightKg = (d.deliveredWeightKg || 0) + deliveredKg;
+                        d.outstandingWeightKg = 0;
                         d.status = 'delivered';
-                        d.deliveredWeightKg = d.weightKg;
                         d.completedAt = now;
-                        execution.currentLoadOnBoard = Math.max(0, execution.currentLoadOnBoard - (d.weightKg || 0));
-                        execution.totalDeliveredWeight += (d.weightKg || 0);
+                        execution.currentLoadOnBoard = Math.max(0, execution.currentLoadOnBoard - deliveredKg);
+                        execution.totalDeliveredWeight += deliveredKg;
+
+                        d.deliveryAttempts.push({
+                            attemptNumber: d.deliveryAttempts.length + 1,
+                            attemptType: 'full',
+                            deliveredWeightKg: deliveredKg,
+                            outstandingWeightKg: 0,
+                            recipient: stop.recipient,
+                            proofOfDelivery: stop.proofOfDelivery,
+                            driverId: req.driver._id,
+                            driverName: req.driver.name,
+                            requestId: reqId,
+                            timestamp: now
+                        });
+
                         affectedShipments.push({
                             shipmentId: d.shipmentId,
                             operation: 'delivery',
                             fromStatus: prevDStatus,
                             toStatus: 'delivered',
-                            deliveredWeightKg: d.weightKg
+                            deliveredWeightKg: deliveredKg,
+                            outstandingWeightKg: 0
                         });
                     }
                 }
@@ -1720,6 +1860,692 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
         });
     } catch (err) {
         res.status(500).json({ message: "Failed to update stop status: " + err.message });
+    }
+});
+
+/**
+ * Multi-role authentication middleware for evidence inspection.
+ * Allows Admin, Driver (trip participant), TransportCompany (vehicle owner), or Trader (shipment owner).
+ */
+const anyAuthorizedEvidenceAuth = async (req, res, next) => {
+    try {
+        const token = extractToken(req);
+        if (!token) {
+            return res.status(401).json({ message: "Kindly Login" });
+        }
+        const decodedData = jwt.verify(token, process.env.JWT_SECRET);
+        const { _id, role } = decodedData;
+        req.user = { id: _id, role };
+
+        if (role === 'driver') {
+            const driver = await Driver.findById(_id);
+            if (driver && driver.status !== 'disabled') req.driver = driver;
+        } else if (role === 'company' || role === 'transport_company') {
+            const company = await TransportCompany.findById(_id);
+            if (company) req.company = company;
+        } else if (role === 'admin') {
+            const admin = await Admin.findById(_id);
+            if (admin) req.admin = admin;
+        } else if (role === 'trader') {
+            const trader = await Trader.findById(_id);
+            if (trader) req.trader = trader;
+        }
+
+        if (!req.driver && !req.company && !req.admin && !req.trader) {
+            return res.status(401).json({ message: "User not found or authorization role invalid." });
+        }
+        next();
+    } catch (err) {
+        return res.status(401).json({ message: "Invalid or expired token." });
+    }
+};
+
+/**
+ * POST /driver/active-trip/stops/:stopIndex/delivery-attempt
+ * Records an individual consignment delivery attempt (full, partial, or failed).
+ * Strictly preserves outstanding quantity, records attempt history, and enforces quantity bounds.
+ */
+driverRouter.post('/driver/active-trip/stops/:stopIndex/delivery-attempt', driverAuth, async (req, res) => {
+    try {
+        const stopIndex = parseInt(req.params.stopIndex, 10);
+        if (isNaN(stopIndex) || stopIndex < 0) {
+            return res.status(400).json({ message: "Invalid stop index format." });
+        }
+
+        const {
+            shipmentId,
+            attemptType,
+            deliveredWeightKg,
+            failureReason,
+            recipient,
+            proofOfDelivery,
+            notes,
+            requestId
+        } = req.body;
+
+        const reqId = requestId || req.headers['x-request-id'] || null;
+
+        if (!shipmentId) {
+            return res.status(400).json({ message: "shipmentId is required." });
+        }
+
+        const validTypes = ['full', 'partial', 'failed'];
+        if (!attemptType || !validTypes.includes(attemptType)) {
+            return res.status(400).json({
+                message: `Invalid attemptType "${attemptType}". Allowed: ${validTypes.join(', ')}`
+            });
+        }
+
+        if ((attemptType === 'failed' || attemptType === 'partial') && (!failureReason || !failureReason.trim())) {
+            return res.status(400).json({
+                message: "A failureReason or explanation note is required for failed or partial deliveries."
+            });
+        }
+
+        const activeAssignment = await DriverAssignment.getActiveForDriver(req.driver._id);
+        if (!activeAssignment || !activeAssignment.truckId) {
+            return res.status(403).json({ message: "Access denied. You have no active vehicle assignment." });
+        }
+
+        const truck = activeAssignment.truckId;
+        const truckIdStr = truck._id.toString();
+
+        let activeTrip = await MergedSchedule.findOne({
+            transportationTruckId: truckIdStr,
+            status: 'accepted'
+        });
+        let tripType = 'MergedSchedule';
+
+        if (!activeTrip) {
+            activeTrip = await Route.findOne({ truckId: truck._id });
+            tripType = 'Route';
+        }
+
+        if (!activeTrip) {
+            return res.status(404).json({ message: "No active trip found for your vehicle." });
+        }
+
+        const execution = await TripStopExecution.getOrCreateExecution({
+            tripId: activeTrip._id,
+            tripType,
+            truckId: truck._id,
+            truckLicensePlate: truck.licensePlate,
+            companyId: truck.companyId,
+            activeTripDoc: activeTrip,
+            truckDoc: truck
+        });
+
+        const stop = execution.stops.find(s => s.stopIndex === stopIndex);
+        if (!stop) {
+            return res.status(404).json({ message: `Stop at index ${stopIndex} not found.` });
+        }
+
+        // Sequential integrity: Cannot execute stop if previous stop is unresolved
+        if (stopIndex > 0) {
+            for (let p = 0; p < stopIndex; p++) {
+                const prev = execution.stops[p];
+                if (prev.status !== 'completed' && prev.status !== 'failed') {
+                    return res.status(400).json({
+                        message: `Preceding stop #${p + 1} ("${prev.stopName}") is currently "${prev.status}". It must be completed or resolved before proceeding.`
+                    });
+                }
+            }
+        }
+
+        const shipment = stop.shipments.find(s => s.shipmentId === shipmentId);
+        if (!shipment) {
+            return res.status(404).json({
+                message: `Shipment "${shipmentId}" not found at stop #${stopIndex + 1} ("${stop.stopName}").`
+            });
+        }
+
+        if (shipment.operation !== 'delivery') {
+            return res.status(400).json({
+                message: `Shipment "${shipmentId}" is a pickup operation, not a delivery operation.`
+            });
+        }
+
+        // Initialize outstandingWeightKg if needed
+        if (shipment.outstandingWeightKg === null || shipment.outstandingWeightKg === undefined) {
+            shipment.outstandingWeightKg = shipment.weightKg - (shipment.deliveredWeightKg || 0);
+        }
+        shipment.deliveryAttempts = shipment.deliveryAttempts || [];
+
+        // Idempotency check via reqId
+        if (reqId) {
+            const alreadyProcessed = shipment.deliveryAttempts.find(a => a.requestId === reqId);
+            if (alreadyProcessed) {
+                return res.status(200).json({
+                    message: `Delivery attempt request ${reqId} was already processed idempotently.`,
+                    shipment,
+                    stopStatus: stop.status,
+                    currentLoadOnBoard: execution.currentLoadOnBoard,
+                    totalDeliveredWeight: execution.totalDeliveredWeight
+                });
+            }
+        }
+
+        // Proof of delivery verification if provided
+        let verifiedPod = null;
+        if (proofOfDelivery && typeof proofOfDelivery === 'object') {
+            if (proofOfDelivery.type === 'otp') {
+                if (!stop.otpVerification || !stop.otpVerification.hashedOtp) {
+                    return res.status(400).json({
+                        message: "No recipient OTP verification was initiated for this stop. Request an OTP first."
+                    });
+                }
+                if (!stop.otpVerification.isVerified) {
+                    if (!proofOfDelivery.otpCode) {
+                        return res.status(400).json({
+                            message: "Recipient OTP code is required for OTP proof of delivery."
+                        });
+                    }
+                    const verifyRes = otpService.verifyOtp(proofOfDelivery.otpCode, stop.otpVerification);
+                    if (!verifyRes.success) {
+                        await execution.save();
+                        return res.status(400).json({
+                            message: verifyRes.message || "Invalid OTP code."
+                        });
+                    }
+                }
+                verifiedPod = {
+                    type: 'otp',
+                    verificationStatus: 'verified',
+                    otpVerified: true,
+                    otpCode: proofOfDelivery.otpCode,
+                    submittedAt: new Date()
+                };
+            } else if (proofOfDelivery.type === 'photo') {
+                if (proofOfDelivery.evidenceId) {
+                    const evidenceDoc = await DeliveryEvidence.findOne({ evidenceId: proofOfDelivery.evidenceId });
+                    if (!evidenceDoc) {
+                        return res.status(400).json({
+                            message: `Delivery evidence "${proofOfDelivery.evidenceId}" not found. Please upload evidence first.`
+                        });
+                    }
+                }
+                verifiedPod = {
+                    type: 'photo',
+                    verificationStatus: 'driver_reported',
+                    evidenceId: proofOfDelivery.evidenceId || null,
+                    photoReference: proofOfDelivery.photoReference || proofOfDelivery.evidenceId || null,
+                    submittedAt: new Date()
+                };
+            } else {
+                verifiedPod = {
+                    type: proofOfDelivery.type || 'acknowledgement',
+                    verificationStatus: 'driver_reported',
+                    signatureData: proofOfDelivery.signatureData || null,
+                    submittedAt: new Date()
+                };
+            }
+        }
+
+        const now = new Date();
+        const prevStatus = shipment.status;
+        let deliveredThisAttempt = 0;
+
+        if (attemptType === 'failed') {
+            // Failed delivery attempt: preserves outstanding quantity without cancelling shipment
+            shipment.status = 'failed';
+            shipment.failureReason = failureReason.trim();
+            shipment.deliveryAttempts.push({
+                attemptNumber: shipment.deliveryAttempts.length + 1,
+                attemptType: 'failed',
+                deliveredWeightKg: 0,
+                outstandingWeightKg: shipment.outstandingWeightKg,
+                recipient: recipient || stop.recipient || null,
+                proofOfDelivery: verifiedPod || null,
+                failureReason: failureReason.trim(),
+                driverId: req.driver._id,
+                driverName: req.driver.name,
+                requestId: reqId,
+                timestamp: now
+            });
+        } else if (attemptType === 'partial') {
+            const dw = Number(deliveredWeightKg);
+            if (isNaN(dw) || dw < 0) {
+                return res.status(400).json({ message: "Delivered quantity cannot be negative or invalid." });
+            }
+            if (dw === 0) {
+                return res.status(400).json({
+                    message: "Delivered quantity must be greater than zero for partial delivery. Otherwise report a failed delivery."
+                });
+            }
+            if (dw > shipment.outstandingWeightKg) {
+                return res.status(400).json({
+                    message: `Delivered quantity (${dw} kg) cannot exceed the outstanding quantity (${shipment.outstandingWeightKg} kg).`
+                });
+            }
+
+            deliveredThisAttempt = dw;
+            shipment.deliveredWeightKg = (shipment.deliveredWeightKg || 0) + deliveredThisAttempt;
+            shipment.outstandingWeightKg = shipment.outstandingWeightKg - deliveredThisAttempt;
+            shipment.status = shipment.outstandingWeightKg === 0 ? 'delivered' : 'partial';
+            shipment.failureReason = failureReason.trim();
+            if (shipment.outstandingWeightKg === 0) {
+                shipment.completedAt = now;
+            }
+
+            execution.currentLoadOnBoard = Math.max(0, execution.currentLoadOnBoard - deliveredThisAttempt);
+            execution.totalDeliveredWeight += deliveredThisAttempt;
+
+            shipment.deliveryAttempts.push({
+                attemptNumber: shipment.deliveryAttempts.length + 1,
+                attemptType: shipment.outstandingWeightKg === 0 ? 'full' : 'partial',
+                deliveredWeightKg: deliveredThisAttempt,
+                outstandingWeightKg: shipment.outstandingWeightKg,
+                recipient: recipient || stop.recipient || null,
+                proofOfDelivery: verifiedPod || null,
+                failureReason: failureReason.trim(),
+                driverId: req.driver._id,
+                driverName: req.driver.name,
+                requestId: reqId,
+                timestamp: now
+            });
+        } else {
+            // attemptType === 'full'
+            if (deliveredWeightKg !== undefined && deliveredWeightKg !== null) {
+                const dw = Number(deliveredWeightKg);
+                if (isNaN(dw) || dw < 0) {
+                    return res.status(400).json({ message: "Delivered quantity cannot be negative." });
+                }
+                if (dw > shipment.outstandingWeightKg) {
+                    return res.status(400).json({
+                        message: `Delivered quantity (${dw} kg) cannot exceed outstanding quantity (${shipment.outstandingWeightKg} kg).`
+                    });
+                }
+                deliveredThisAttempt = dw;
+            } else {
+                deliveredThisAttempt = shipment.outstandingWeightKg;
+            }
+
+            shipment.deliveredWeightKg = (shipment.deliveredWeightKg || 0) + deliveredThisAttempt;
+            shipment.outstandingWeightKg = shipment.outstandingWeightKg - deliveredThisAttempt;
+            shipment.status = shipment.outstandingWeightKg === 0 ? 'delivered' : 'partial';
+            if (shipment.outstandingWeightKg === 0) {
+                shipment.completedAt = now;
+            }
+
+            execution.currentLoadOnBoard = Math.max(0, execution.currentLoadOnBoard - deliveredThisAttempt);
+            execution.totalDeliveredWeight += deliveredThisAttempt;
+
+            shipment.deliveryAttempts.push({
+                attemptNumber: shipment.deliveryAttempts.length + 1,
+                attemptType: shipment.outstandingWeightKg === 0 ? 'full' : 'partial',
+                deliveredWeightKg: deliveredThisAttempt,
+                outstandingWeightKg: shipment.outstandingWeightKg,
+                recipient: recipient || stop.recipient || null,
+                proofOfDelivery: verifiedPod || null,
+                driverId: req.driver._id,
+                driverName: req.driver.name,
+                requestId: reqId,
+                timestamp: now
+            });
+        }
+
+        if (recipient && typeof recipient === 'object') {
+            stop.recipient = {
+                name: recipient.name || stop.recipient?.name || null,
+                phone: recipient.phone || stop.recipient?.phone || null,
+                notes: recipient.notes || stop.recipient?.notes || null
+            };
+        }
+
+        if (verifiedPod) {
+            stop.proofOfDelivery = verifiedPod;
+        }
+
+        // Append transition audit
+        stop.transitionHistory.push({
+            fromStatus: stop.status,
+            toStatus: stop.status,
+            driverId: req.driver._id,
+            driverName: req.driver.name,
+            actorRole: 'driver',
+            timestamp: now,
+            reason: failureReason || notes || `Delivery attempt (${attemptType})`,
+            notes: notes ? notes.trim() : null,
+            requestId: reqId,
+            affectedShipments: [{
+                shipmentId: shipment.shipmentId,
+                operation: 'delivery',
+                fromStatus: prevStatus,
+                toStatus: shipment.status,
+                deliveredWeightKg: deliveredThisAttempt,
+                outstandingWeightKg: shipment.outstandingWeightKg,
+                failureReason: shipment.failureReason
+            }]
+        });
+
+        // If all delivery shipments at this stop are delivered and stop is in progress, stop can complete
+        const deliveries = stop.shipments.filter(s => s.operation === 'delivery');
+        const allDeliveriesDone = deliveries.every(d => d.status === 'delivered' && d.outstandingWeightKg === 0);
+        if (allDeliveriesDone && (stop.status === 'in_progress' || stop.status === 'arrived')) {
+            stop.status = 'completed';
+            stop.completedAt = now;
+        }
+
+        stop.lastUpdatedAt = now;
+        await execution.save();
+
+        res.json({
+            message: `Delivery attempt for shipment "${shipment.reference}" recorded successfully.`,
+            shipment: {
+                shipmentId: shipment.shipmentId,
+                reference: shipment.reference,
+                weightKg: shipment.weightKg,
+                deliveredWeightKg: shipment.deliveredWeightKg,
+                outstandingWeightKg: shipment.outstandingWeightKg,
+                status: shipment.status,
+                failureReason: shipment.failureReason,
+                completedAt: shipment.completedAt,
+                attemptsCount: shipment.deliveryAttempts.length,
+                latestAttempt: shipment.deliveryAttempts[shipment.deliveryAttempts.length - 1]
+            },
+            stop: {
+                stopIndex: stop.stopIndex,
+                stopName: stop.stopName,
+                status: stop.status,
+                completedAt: stop.completedAt
+            },
+            currentLoadOnBoard: execution.currentLoadOnBoard,
+            totalDeliveredWeight: execution.totalDeliveredWeight
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to record delivery attempt: " + err.message });
+    }
+});
+
+/**
+ * POST /driver/active-trip/stops/:stopIndex/generate-otp
+ * Generates a secure, expiring 6-digit OTP for recipient delivery verification.
+ * Plaintext OTP is returned once in response for delivery to recipient, never stored in DB.
+ */
+driverRouter.post('/driver/active-trip/stops/:stopIndex/generate-otp', driverAuth, async (req, res) => {
+    try {
+        const stopIndex = parseInt(req.params.stopIndex, 10);
+        if (isNaN(stopIndex) || stopIndex < 0) {
+            return res.status(400).json({ message: "Invalid stop index format." });
+        }
+
+        const activeAssignment = await DriverAssignment.getActiveForDriver(req.driver._id);
+        if (!activeAssignment || !activeAssignment.truckId) {
+            return res.status(403).json({ message: "Access denied. You have no active vehicle assignment." });
+        }
+
+        const truck = activeAssignment.truckId;
+        const truckIdStr = truck._id.toString();
+
+        let activeTrip = await MergedSchedule.findOne({
+            transportationTruckId: truckIdStr,
+            status: 'accepted'
+        });
+        let tripType = 'MergedSchedule';
+
+        if (!activeTrip) {
+            activeTrip = await Route.findOne({ truckId: truck._id });
+            tripType = 'Route';
+        }
+
+        if (!activeTrip) {
+            return res.status(404).json({ message: "No active trip found for your vehicle." });
+        }
+
+        const execution = await TripStopExecution.getOrCreateExecution({
+            tripId: activeTrip._id,
+            tripType,
+            truckId: truck._id,
+            truckLicensePlate: truck.licensePlate,
+            companyId: truck.companyId,
+            activeTripDoc: activeTrip,
+            truckDoc: truck
+        });
+
+        const stop = execution.stops.find(s => s.stopIndex === stopIndex);
+        if (!stop) {
+            return res.status(404).json({ message: `Stop at index ${stopIndex} not found.` });
+        }
+
+        const otpPayload = otpService.generateOtp();
+        stop.otpVerification = {
+            hashedOtp: otpPayload.hashedOtp,
+            salt: otpPayload.salt,
+            expiresAt: otpPayload.expiresAt,
+            attemptCount: 0,
+            maxAttempts: otpPayload.maxAttempts,
+            isVerified: false,
+            verifiedAt: null
+        };
+
+        await execution.save();
+
+        res.json({
+            message: "Consignee OTP generated successfully. Provide code to recipient upon arrival.",
+            expiresAt: otpPayload.expiresAt,
+            maxAttempts: otpPayload.maxAttempts,
+            formattedOtp: otpPayload.otp // Returned once for test/SMS distribution
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to generate OTP: " + err.message });
+    }
+});
+
+/**
+ * POST /driver/active-trip/stops/:stopIndex/verify-otp
+ * Verifies recipient OTP code against stored hash with rate-limiting and expiration checks.
+ */
+driverRouter.post('/driver/active-trip/stops/:stopIndex/verify-otp', driverAuth, async (req, res) => {
+    try {
+        const stopIndex = parseInt(req.params.stopIndex, 10);
+        if (isNaN(stopIndex) || stopIndex < 0) {
+            return res.status(400).json({ message: "Invalid stop index format." });
+        }
+
+        const { otpCode } = req.body;
+        if (!otpCode || typeof otpCode !== 'string' || !otpCode.trim()) {
+            return res.status(400).json({ message: "otpCode is required." });
+        }
+
+        const activeAssignment = await DriverAssignment.getActiveForDriver(req.driver._id);
+        if (!activeAssignment || !activeAssignment.truckId) {
+            return res.status(403).json({ message: "Access denied. You have no active vehicle assignment." });
+        }
+
+        const truck = activeAssignment.truckId;
+        const truckIdStr = truck._id.toString();
+
+        let activeTrip = await MergedSchedule.findOne({
+            transportationTruckId: truckIdStr,
+            status: 'accepted'
+        });
+        let tripType = 'MergedSchedule';
+
+        if (!activeTrip) {
+            activeTrip = await Route.findOne({ truckId: truck._id });
+            tripType = 'Route';
+        }
+
+        if (!activeTrip) {
+            return res.status(404).json({ message: "No active trip found for your vehicle." });
+        }
+
+        const execution = await TripStopExecution.getOrCreateExecution({
+            tripId: activeTrip._id,
+            tripType,
+            truckId: truck._id,
+            truckLicensePlate: truck.licensePlate,
+            companyId: truck.companyId,
+            activeTripDoc: activeTrip,
+            truckDoc: truck
+        });
+
+        const stop = execution.stops.find(s => s.stopIndex === stopIndex);
+        if (!stop) {
+            return res.status(404).json({ message: `Stop at index ${stopIndex} not found.` });
+        }
+
+        const verification = otpService.verifyOtp(otpCode, stop.otpVerification);
+        await execution.save();
+
+        if (!verification.success) {
+            return res.status(400).json({
+                message: verification.message,
+                reason: verification.reason,
+                attemptsRemaining: verification.attemptsRemaining
+            });
+        }
+
+        res.json({
+            message: verification.message,
+            isVerified: true,
+            verifiedAt: stop.otpVerification.verifiedAt
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to verify OTP: " + err.message });
+    }
+});
+
+/**
+ * POST /driver/active-trip/stops/:stopIndex/evidence
+ * Securely uploads a proof of delivery photo or document to local storage and indexes metadata in DB.
+ */
+driverRouter.post('/driver/active-trip/stops/:stopIndex/evidence', driverAuth, async (req, res) => {
+    try {
+        const stopIndex = parseInt(req.params.stopIndex, 10);
+        if (isNaN(stopIndex) || stopIndex < 0) {
+            return res.status(400).json({ message: "Invalid stop index format." });
+        }
+
+        const { fileName, mimeType, dataBase64, shipmentId, metadata } = req.body;
+
+        if (!dataBase64 || typeof dataBase64 !== 'string') {
+            return res.status(400).json({ message: "dataBase64 content is required." });
+        }
+
+        const activeAssignment = await DriverAssignment.getActiveForDriver(req.driver._id);
+        if (!activeAssignment || !activeAssignment.truckId) {
+            return res.status(403).json({ message: "Access denied. You have no active vehicle assignment." });
+        }
+
+        const truck = activeAssignment.truckId;
+        const truckIdStr = truck._id.toString();
+
+        let activeTrip = await MergedSchedule.findOne({
+            transportationTruckId: truckIdStr,
+            status: 'accepted'
+        });
+        let tripType = 'MergedSchedule';
+
+        if (!activeTrip) {
+            activeTrip = await Route.findOne({ truckId: truck._id });
+            tripType = 'Route';
+        }
+
+        if (!activeTrip) {
+            return res.status(404).json({ message: "No active trip found for your vehicle." });
+        }
+
+        const buffer = Buffer.from(dataBase64, 'base64');
+        const stored = await evidenceStorage.saveEvidence({
+            buffer,
+            mimeType,
+            originalFileName: fileName
+        });
+
+        const evidence = await DeliveryEvidence.create({
+            evidenceId: stored.evidenceId,
+            fileName: stored.fileName,
+            filePath: stored.filePath,
+            mimeType: stored.mimeType,
+            sizeBytes: stored.sizeBytes,
+            tripId: activeTrip._id.toString(),
+            truckId: truck._id,
+            driverId: req.driver._id,
+            stopIndex,
+            shipmentId: shipmentId || null,
+            companyId: truck.companyId || req.driver.companyId || null,
+            verificationStatus: 'driver_reported',
+            metadata: metadata || {}
+        });
+
+        // Also associate with execution stop proofOfDelivery
+        const execution = await TripStopExecution.findOne({ tripId: activeTrip._id.toString() });
+        if (execution) {
+            const stop = execution.stops.find(s => s.stopIndex === stopIndex);
+            if (stop) {
+                stop.proofOfDelivery = {
+                    type: 'photo',
+                    verificationStatus: 'driver_reported',
+                    evidenceId: evidence.evidenceId,
+                    photoReference: evidence.evidenceId,
+                    submittedAt: new Date()
+                };
+                await execution.save();
+            }
+        }
+
+        res.status(201).json({
+            message: "Delivery evidence uploaded successfully.",
+            evidence: {
+                evidenceId: evidence.evidenceId,
+                fileName: evidence.fileName,
+                mimeType: evidence.mimeType,
+                sizeBytes: evidence.sizeBytes,
+                verificationStatus: evidence.verificationStatus,
+                createdAt: evidence.createdAt
+            }
+        });
+    } catch (err) {
+        const isValidationErr = err.message.includes('MIME') || err.message.includes('size') || err.message.includes('format') || err.message.includes('empty');
+        res.status(isValidationErr ? 400 : 500).json({ message: "Failed to upload delivery evidence: " + err.message });
+    }
+});
+
+/**
+ * GET /driver/evidence/:evidenceId
+ * Securely streams an authorized delivery evidence file.
+ * Access is restricted to assigned driver, transport company owner, admin, or trader who owns shipment.
+ */
+driverRouter.get('/driver/evidence/:evidenceId', anyAuthorizedEvidenceAuth, async (req, res) => {
+    try {
+        const { evidenceId } = req.params;
+        const evidence = await DeliveryEvidence.findOne({ evidenceId });
+        if (!evidence) {
+            return res.status(404).json({ message: "Delivery evidence not found." });
+        }
+
+        // Access Authorization
+        let isAuthorized = false;
+        if (req.admin) {
+            isAuthorized = true;
+        } else if (req.driver && evidence.driverId.toString() === req.driver._id.toString()) {
+            isAuthorized = true;
+        } else if (req.company && evidence.companyId && evidence.companyId.toString() === req.company._id.toString()) {
+            isAuthorized = true;
+        } else if (req.trader && evidence.shipmentId) {
+            const traderReq = await TraderRequest.findById(evidence.shipmentId);
+            if (traderReq && traderReq.traderId.toString() === req.trader._id.toString()) {
+                isAuthorized = true;
+            }
+        }
+
+        if (!isAuthorized) {
+            return res.status(403).json({
+                message: "Access denied. You are not authorized to view this delivery evidence."
+            });
+        }
+
+        const exists = await evidenceStorage.evidenceExists(evidence.filePath);
+        if (!exists) {
+            return res.status(404).json({ message: "Evidence file missing from storage." });
+        }
+
+        res.setHeader('Content-Type', evidence.mimeType);
+        res.setHeader('Content-Length', evidence.sizeBytes);
+        evidenceStorage.createEvidenceReadStream(evidence.filePath).pipe(res);
+    } catch (err) {
+        res.status(500).json({ message: "Failed to retrieve delivery evidence: " + err.message });
     }
 });
 
