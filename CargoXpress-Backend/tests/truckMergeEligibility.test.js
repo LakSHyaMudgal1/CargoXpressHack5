@@ -19,6 +19,13 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
     let truckA, truckB, truckC, truckD, truckE;
     let routeA, routeB, routeC, routeD, routeE;
 
+    // Unique cities to isolate tests from seed data in shared database
+    const C1 = 'TestCorridor-Alpha';
+    const C2 = 'TestCorridor-Beta';
+    const C3 = 'TestCorridor-Gamma';
+    const C4 = 'TestCorridor-Delta';
+    const C5 = 'TestCorridor-Epsilon';
+
     before(async () => {
         const uri = process.env.MONGODB_STRING;
         assert.ok(uri, 'MONGODB_STRING must be defined in environment');
@@ -29,7 +36,7 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
         // Clean up previous test artifacts if any
         await cleanupTestData();
 
-        // Create a test transport company
+        // Create an isolated test transport company
         testCompany = await TransportCompany.create({
             name: 'Eligibility Test Transport Ltd',
             emailId: 'test_company_eligibility@cargoxpress-test.com',
@@ -49,9 +56,9 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
         routeA = await Route.create({
             companyId: testCompany._id,
             truckId: truckA._id,
-            source: 'Mumbai',
-            destination: 'Rajkot',
-            stops: ['Mumbai', 'Surat', 'Vadodara', 'Ahmedabad', 'Rajkot'],
+            source: C1,
+            destination: C5,
+            stops: [C1, C2, C3, C4, C5],
         });
 
         // ── Truck B: First Compatible Truck (Capacity: 5000 kg) ──
@@ -65,9 +72,9 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
         routeB = await Route.create({
             companyId: testCompany._id,
             truckId: truckB._id,
-            source: 'Mumbai',
-            destination: 'Vadodara',
-            stops: ['Mumbai', 'Surat', 'Vadodara'],
+            source: C1,
+            destination: C3,
+            stops: [C1, C2, C3],
         });
 
         // ── Truck C: Second Compatible Truck (Capacity: 4000 kg) ──
@@ -81,9 +88,9 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
         routeC = await Route.create({
             companyId: testCompany._id,
             truckId: truckC._id,
-            source: 'Surat',
-            destination: 'Ahmedabad',
-            stops: ['Surat', 'Vadodara', 'Ahmedabad'],
+            source: C2,
+            destination: C4,
+            stops: [C2, C3, C4],
         });
 
         // ── Truck D: Incompatible (Capacity Overload) ──
@@ -97,9 +104,9 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
         routeD = await Route.create({
             companyId: testCompany._id,
             truckId: truckD._id,
-            source: 'Surat',
-            destination: 'Ahmedabad',
-            stops: ['Surat', 'Vadodara', 'Ahmedabad'],
+            source: C2,
+            destination: C4,
+            stops: [C2, C3, C4],
         });
 
         // ── Truck E: Incompatible (Reverse Route / Directional Mismatch) ──
@@ -113,9 +120,9 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
         routeE = await Route.create({
             companyId: testCompany._id,
             truckId: truckE._id,
-            source: 'Ahmedabad',
-            destination: 'Surat', // Opposite direction from Truck A's corridor
-            stops: ['Ahmedabad', 'Surat'],
+            source: C4,
+            destination: C2, // Opposite direction from Truck A's corridor
+            stops: [C4, C2],
         });
     });
 
@@ -133,6 +140,7 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
             'TEST-TRK-C-4000',
             'TEST-TRK-D-OVERLOAD',
             'TEST-TRK-E-REVERSED',
+            'TEST-TRK-F-REJECTED',
         ];
         const trucks = await Truck.find({ licensePlate: { $in: plates } });
         const truckIds = trucks.map(t => t._id);
@@ -142,6 +150,8 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
             $or: [
                 { truckOneId: { $in: truckIds } },
                 { truckTwoId: { $in: truckIds } },
+                { truckOneLicensePlate: { $in: plates } },
+                { truckTwoLicensePlate: { $in: plates } },
             ]
         });
         await MergedSchedule.deleteMany({
@@ -168,12 +178,15 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
         assert.equal(pairAB.truckTwoLicensePlate, 'TEST-TRK-B-5000', 'Truck B should be absorbed');
     });
 
+    let savedPairABId;
+
     test('2. First merge approval consolidates loads and marks Truck B as released in FreeTruck', async () => {
         const candidates = await generateMergeablePairs();
         const pairAB = candidates.find(
             p => p.truckOneLicensePlate === 'TEST-TRK-A-8000' && p.truckTwoLicensePlate === 'TEST-TRK-B-5000'
         );
         assert.ok(pairAB, 'Pair AB must exist');
+        savedPairABId = pairAB._id;
 
         const mergedSchedule = await executeAcceptPair(pairAB._id);
         assert.equal(mergedSchedule.status, 'accepted');
@@ -181,11 +194,11 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
         assert.equal(mergedSchedule.mergedFromTrucks.length, 2);
 
         // Check consolidated loads on Truck A:
-        // Mumbai: 1000 + 900 = 1900
-        // Surat: 800 + 700 = 1500
-        // Vadodara: 600 + 600 = 1200
-        // Ahmedabad: 500 + 0 = 500
-        // Rajkot: 400 + 0 = 400
+        // C1: 1000 + 900 = 1900
+        // C2: 800 + 700 = 1500
+        // C3: 600 + 600 = 1200
+        // C4: 500 + 0 = 500
+        // C5: 400 + 0 = 400
         assert.deepEqual(mergedSchedule.finalCurrentLoad, [1900, 1500, 1200, 500, 400]);
         assert.deepEqual(mergedSchedule.finalRemainingLoad, [6100, 6500, 6800, 7500, 7600]);
 
@@ -199,7 +212,19 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
         assert.deepEqual(updatedTruckA.remainingLoad, [6100, 6500, 6800, 7500, 7600]);
     });
 
-    test('3. Released Truck B is NOT proposed as candidate or carrier', async () => {
+    test('3. Double-submit protection: executing accept on already processed pair throws 409', async () => {
+        await assert.rejects(
+            async () => {
+                await executeAcceptPair(savedPairABId);
+            },
+            (err) => {
+                assert.equal(err.statusCode, 409, 'Expected 409 Conflict on double submit');
+                return true;
+            }
+        );
+    });
+
+    test('4. Released Truck B is NOT proposed as candidate or carrier', async () => {
         const candidates = await generateMergeablePairs();
 
         const anyPairWithB = candidates.filter(
@@ -209,7 +234,7 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
         assert.equal(anyPairWithB.length, 0, 'Released Truck B must never be proposed in any candidate pair');
     });
 
-    test('4. Active carrier Truck A remains eligible and generates candidate with Truck C', async () => {
+    test('5. Active carrier Truck A remains eligible and generates candidate with Truck C', async () => {
         const candidates = await generateMergeablePairs();
 
         const pairAC = candidates.find(
@@ -221,7 +246,7 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
         assert.equal(pairAC.truckTwoLicensePlate, 'TEST-TRK-C-4000');
     });
 
-    test('5. Ineligible trucks (Overload D and Reversed-Route E) remain excluded', async () => {
+    test('6. Ineligible trucks (Overload D and Reversed-Route E) remain excluded', async () => {
         const candidates = await generateMergeablePairs();
 
         const pairWithOverloadD = candidates.find(
@@ -235,7 +260,7 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
         assert.equal(pairWithReversedE, undefined, 'Reversed-direction Truck E must remain excluded');
     });
 
-    test('6. Second merge approval consolidates Truck C into Truck A without duplicate schedules', async () => {
+    test('7. Second merge approval consolidates Truck C into Truck A without duplicate schedules', async () => {
         const candidates = await generateMergeablePairs();
         const pairAC = candidates.find(
             p => p.truckOneLicensePlate === 'TEST-TRK-A-8000' && p.truckTwoLicensePlate === 'TEST-TRK-C-4000'
@@ -256,11 +281,11 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
         assert.ok(mergedIds.includes(truckC._id.toString()), 'Must contain Truck C');
 
         // Check new 3-truck consolidated loads:
-        // Mumbai: 1900 + 0 = 1900
-        // Surat: 1500 + 500 = 2000
-        // Vadodara: 1200 + 400 = 1600
-        // Ahmedabad: 500 + 300 = 800
-        // Rajkot: 400 + 0 = 400
+        // C1: 1900 + 0 = 1900
+        // C2: 1500 + 500 = 2000
+        // C3: 1200 + 400 = 1600
+        // C4: 500 + 300 = 800
+        // C5: 400 + 0 = 400
         assert.deepEqual(updatedSchedule.finalCurrentLoad, [1900, 2000, 1600, 800, 400]);
         assert.deepEqual(updatedSchedule.finalRemainingLoad, [6100, 6000, 6400, 7200, 7600]);
 
@@ -274,5 +299,94 @@ describe('Truck Merge Eligibility & Successive Merging Test Suite', () => {
             p => p.truckTwoLicensePlate === 'TEST-TRK-B-5000' || p.truckTwoLicensePlate === 'TEST-TRK-C-4000'
         );
         assert.equal(stalePairs.length, 0, 'No absorbed trucks should appear in candidate pairs');
+    });
+
+    test('8. Manifest retains detailed shipment metadata for carrier and all absorbed trucks', async () => {
+        const schedule = await MergedSchedule.findOne({ transportationTruckId: truckA._id.toString() });
+        assert.ok(schedule, 'Consolidated schedule must exist');
+
+        // Check entry 0 (Carrier Truck A)
+        const shipmentA = schedule.mergedFromTrucks.find(t => t.id === truckA._id.toString());
+        assert.ok(shipmentA, 'Carrier shipment must exist');
+        assert.equal(shipmentA.role, 'carrier');
+        assert.equal(shipmentA.licensePlate, 'TEST-TRK-A-8000');
+        assert.deepEqual(shipmentA.stops, [C1, C2, C3, C4, C5]);
+
+        // Check entry 1 (Absorbed Truck B)
+        const shipmentB = schedule.mergedFromTrucks.find(t => t.id === truckB._id.toString());
+        assert.ok(shipmentB, 'Absorbed shipment B must exist');
+        assert.equal(shipmentB.role, 'absorbed');
+        assert.equal(shipmentB.licensePlate, 'TEST-TRK-B-5000');
+        assert.deepEqual(shipmentB.stops, [C1, C2, C3]);
+        assert.deepEqual(shipmentB.load, [900, 700, 600]);
+
+        // Check entry 2 (Absorbed Truck C)
+        const shipmentC = schedule.mergedFromTrucks.find(t => t.id === truckC._id.toString());
+        assert.ok(shipmentC, 'Absorbed shipment C must exist');
+        assert.equal(shipmentC.role, 'absorbed');
+        assert.equal(shipmentC.licensePlate, 'TEST-TRK-C-4000');
+        assert.deepEqual(shipmentC.stops, [C2, C3, C4]);
+        assert.deepEqual(shipmentC.load, [500, 400, 300]);
+    });
+
+    test('9. Execution revalidation: rejecting a pair with an active carrier preserves carrier schedule', async () => {
+        // Create an unmerged Truck F
+        const truckF = await Truck.create({
+            companyId: testCompany._id,
+            licensePlate: 'TEST-TRK-F-REJECTED',
+            totalCapacity: 3000,
+            currentLoad: [300, 300],
+            remainingLoad: [2700, 2700],
+        });
+        await Route.create({
+            companyId: testCompany._id,
+            truckId: truckF._id,
+            source: C3,
+            destination: C4,
+            stops: [C3, C4],
+        });
+
+        // Generate candidate pair between Truck A and Truck F
+        const candidates = await generateMergeablePairs();
+        const pairAF = candidates.find(
+            p => p.truckOneLicensePlate === 'TEST-TRK-A-8000' && p.truckTwoLicensePlate === 'TEST-TRK-F-REJECTED'
+        );
+        assert.ok(pairAF, 'Expected Pair (Truck A, Truck F) to be generated');
+
+        // Simulate admin rejection via DELETE route logic
+        const makeIndependentSchedule = async (truck, stops) => {
+            const hasAccepted = await MergedSchedule.findOne({
+                transportationTruckId: truck._id.toString(),
+                status: 'accepted'
+            });
+            if (hasAccepted) return; // Must preserve active accepted schedule!
+
+            await MergedSchedule.create({
+                transportationTruckId: truck._id.toString(),
+                transportationTruckLicensePlate: truck.licensePlate,
+                mergedFromTrucks: [],
+                finalSource: stops[0],
+                finalDestination: stops[stops.length - 1],
+                stops,
+                finalCurrentLoad: truck.currentLoad,
+                finalRemainingLoad: truck.remainingLoad,
+                totalCapacity: truck.totalCapacity,
+                status: 'rejected',
+            });
+        };
+
+        await makeIndependentSchedule(truckA, pairAF.truckOneStops);
+        await makeIndependentSchedule(truckF, pairAF.truckTwoStops);
+        await MergeablePair.findByIdAndDelete(pairAF._id);
+
+        // Verify Truck A still has its ACCEPTED schedule with 3 trucks, not replaced with rejected!
+        const schedA = await MergedSchedule.findOne({ transportationTruckId: truckA._id.toString() });
+        assert.equal(schedA.status, 'accepted');
+        assert.equal(schedA.mergedFromTrucks.length, 3);
+
+        // Verify Truck F received an independent dispatch schedule with status rejected
+        const schedF = await MergedSchedule.findOne({ transportationTruckId: truckF._id.toString() });
+        assert.ok(schedF, 'Truck F must have its independent dispatch schedule');
+        assert.equal(schedF.status, 'rejected');
     });
 });

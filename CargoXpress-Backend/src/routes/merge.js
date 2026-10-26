@@ -10,6 +10,197 @@ const FreeTruck = require('../models/freeTruck');
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 /**
+ * Evaluates route compatibility between a carrier's committed stops and an incoming truck's stops.
+ * Supports:
+ * - A shorter route contained as a subsequence within the carrier route.
+ * - Partial overlaps with compatible pickup and delivery locations within the carrier's reach.
+ * - Compatible intermediate stops that can be incorporated without violating stop order.
+ * Rejects:
+ * - Route where stop sequence violates delivery constraints (e.g. reversed order or cyclic dependencies).
+ * - Partial overlap where incoming shipment begins before carrier origin or ends after carrier destination.
+ */
+function evaluateRouteCompatibility(carrierStops, incomingStops) {
+    if (!carrierStops || carrierStops.length < 2 || !incomingStops || incomingStops.length < 2) {
+        return { compatible: false, reason: "Invalid stop arrays" };
+    }
+
+    const carrierOrigin = carrierStops[0];
+    const carrierDest = carrierStops[carrierStops.length - 1];
+    const incomingOrigin = incomingStops[0];
+    const incomingDest = incomingStops[incomingStops.length - 1];
+
+    // 1. Check all shared stops appear in strictly increasing order in the carrier's committed sequence
+    let lastCarrierIdx = -1;
+    const sharedIndicesInCarrier = [];
+    for (let i = 0; i < incomingStops.length; i++) {
+        const stop = incomingStops[i];
+        const cIdx = carrierStops.indexOf(stop);
+        if (cIdx !== -1) {
+            if (cIdx <= lastCarrierIdx) {
+                return {
+                    compatible: false,
+                    reason: `Stop sequence violates delivery constraints: "${stop}" appears out of order relative to carrier itinerary.`
+                };
+            }
+            lastCarrierIdx = cIdx;
+            sharedIndicesInCarrier.push({ stop, inCarrierIdx: cIdx, inIncomingIdx: i });
+        }
+    }
+
+    // Must share at least one stop to have any corridor overlap
+    if (sharedIndicesInCarrier.length === 0) {
+        return { compatible: false, reason: "No route overlap" };
+    }
+
+    // 2. Bound checks: The carrier must be able to service the incoming shipment from origin to destination
+    const firstShared = sharedIndicesInCarrier[0];
+    const lastShared = sharedIndicesInCarrier[sharedIndicesInCarrier.length - 1];
+
+    // If incoming origin is not shared with carrier or comes before the first shared stop
+    if (incomingOrigin !== firstShared.stop && firstShared.inIncomingIdx > 0) {
+        return {
+            compatible: false,
+            reason: `Incoming shipment origin "${incomingOrigin}" is not reachable on the carrier's itinerary.`
+        };
+    }
+
+    // If incoming destination is not shared or extends beyond the last shared stop
+    if (incomingDest !== lastShared.stop && lastShared.inIncomingIdx < incomingStops.length - 1) {
+        return {
+            compatible: false,
+            reason: `Incoming shipment destination "${incomingDest}" is beyond the carrier's itinerary bounds.`
+        };
+    }
+
+    // 3. Construct the combined itinerary `allStops`
+    const allStops = [...carrierStops];
+
+    // Insert any intermediate unshared stops from incomingStops without altering carrier's sequence
+    for (let i = 0; i < incomingStops.length; i++) {
+        const stop = incomingStops[i];
+        if (!allStops.includes(stop)) {
+            let prevInAll = -1;
+            for (let p = i - 1; p >= 0; p--) {
+                const idx = allStops.indexOf(incomingStops[p]);
+                if (idx !== -1) { prevInAll = idx; break; }
+            }
+            let nextInAll = -1;
+            for (let n = i + 1; n < incomingStops.length; n++) {
+                const idx = allStops.indexOf(incomingStops[n]);
+                if (idx !== -1) { nextInAll = idx; break; }
+            }
+
+            if (prevInAll !== -1 && nextInAll !== -1 && prevInAll < nextInAll) {
+                allStops.splice(prevInAll + 1, 0, stop);
+            } else {
+                return {
+                    compatible: false,
+                    reason: `Cannot safely incorporate intermediate stop "${stop}" without violating stop order.`
+                };
+            }
+        }
+    }
+
+    // Sanity checks: both sequences must be forward subsequences of allStops
+    let cCheck = -1;
+    for (const s of carrierStops) {
+        const idx = allStops.indexOf(s);
+        if (idx <= cCheck) return { compatible: false, reason: "Carrier sequence integrity violation" };
+        cCheck = idx;
+    }
+
+    let iCheck = -1;
+    for (const s of incomingStops) {
+        const idx = allStops.indexOf(s);
+        if (idx <= iCheck) return { compatible: false, reason: "Incoming sequence integrity violation" };
+        iCheck = idx;
+    }
+
+    return { compatible: true, allStops };
+}
+
+/**
+ * Validates capacity along each affected route segment between consecutive stops.
+ * Accounts for:
+ * - Cargo already aboard the carrier.
+ * - New cargo introduced by the incoming shipment.
+ * - Actual pickup point (incoming cargo = 0 before pickup).
+ * - Actual delivery point (incoming cargo = 0 after delivery).
+ * - Cargo unloaded before subsequent segments (drops along the way).
+ * - Intermediate pickups and continuing cargo.
+ */
+function evaluateSegmentCapacity(carrierStops, carrierCurrentLoads, carrierCapacity, incomingStops, incomingCurrentLoads, allStops) {
+    const numStops = allStops.length;
+    const finalCurrentLoad = [];
+    const finalRemainingLoad = [];
+
+    const incomingStartIdx = allStops.indexOf(incomingStops[0]);
+    const incomingEndIdx = allStops.indexOf(incomingStops[incomingStops.length - 1]);
+
+    for (let k = 0; k < numStops; k++) {
+        const stopName = allStops[k];
+
+        // 1. Carrier load at this stop
+        let carrierLoad = 0;
+        const cIdx = carrierStops.indexOf(stopName);
+        if (cIdx !== -1) {
+            carrierLoad = carrierCurrentLoads[cIdx] || 0;
+        } else {
+            // Stop was inserted: carrier continues with load from preceding carrier stop
+            let lastC = -1;
+            for (let p = k - 1; p >= 0; p--) {
+                const idx = carrierStops.indexOf(allStops[p]);
+                if (idx !== -1) { lastC = idx; break; }
+            }
+            carrierLoad = lastC !== -1 ? (carrierCurrentLoads[lastC] || 0) : 0;
+        }
+
+        // 2. Incoming load at this stop
+        let incomingLoad = 0;
+        if (k >= incomingStartIdx && k <= incomingEndIdx) {
+            const iIdx = incomingStops.indexOf(stopName);
+            if (iIdx !== -1) {
+                incomingLoad = incomingCurrentLoads[iIdx] || 0;
+            } else {
+                let lastI = -1;
+                for (let p = k - 1; p >= 0; p--) {
+                    const idx = incomingStops.indexOf(allStops[p]);
+                    if (idx !== -1) { lastI = idx; break; }
+                }
+                incomingLoad = lastI !== -1 ? (incomingCurrentLoads[lastI] || 0) : 0;
+            }
+        } else {
+            // Before pickup or after delivery (unloaded!)
+            incomingLoad = 0;
+        }
+
+        const totalLoadAtStop = carrierLoad + incomingLoad;
+
+        if (totalLoadAtStop > carrierCapacity) {
+            return {
+                feasible: false,
+                failedStopIndex: k,
+                stopName,
+                carrierLoad,
+                incomingLoad,
+                totalLoadAtStop,
+                capacity: carrierCapacity,
+                reason: `Capacity exceeded at stop "${stopName}": total load ${totalLoadAtStop} kg exceeds truck capacity ${carrierCapacity} kg.`
+            };
+        }
+
+        finalCurrentLoad.push(totalLoadAtStop);
+        finalRemainingLoad.push(Math.max(carrierCapacity - totalLoadAtStop, 0));
+    }
+
+    return {
+        feasible: true,
+        finalCurrentLoad,
+        finalRemainingLoad,
+    };
+}
+
+/**
  * Reconciles carrier vs absorbed truck and calculates unified route and consolidated loads.
  */
 function buildMergedData(pair, truckOne, truckTwo, existingCarrierSchedule = null) {
@@ -20,7 +211,6 @@ function buildMergedData(pair, truckOne, truckTwo, existingCarrierSchedule = nul
         finalTruck = truckTwo;
         freeTruck = truckOne;
     } else if (truckTwo.totalCapacity === truckOne.totalCapacity) {
-        // If truckTwo is already the carrier in an active schedule, preserve it as carrier
         if (existingCarrierSchedule && existingCarrierSchedule.transportationTruckId === truckTwo._id.toString()) {
             finalTruck = truckTwo;
             freeTruck = truckOne;
@@ -29,7 +219,6 @@ function buildMergedData(pair, truckOne, truckTwo, existingCarrierSchedule = nul
 
     const totalCapacity = finalTruck.totalCapacity;
 
-    // Determine current stops and load for finalTruck (use active schedule if already a carrier)
     let carrierStops = [];
     let carrierCurrentLoad = [];
 
@@ -44,31 +233,26 @@ function buildMergedData(pair, truckOne, truckTwo, existingCarrierSchedule = nul
     const absorbedStops = (freeTruck._id.toString() === truckTwo._id.toString() ? pair.truckTwoStops : pair.truckOneStops) || [];
     const absorbedCurrentLoad = freeTruck.currentLoad || [];
 
-    // Union of stops, preserving sequence order
-    let allStops = [...new Set([...(carrierStops || []), ...(absorbedStops || [])])];
-    allStops.sort((a, b) => {
-        const ia = Math.min(
-            carrierStops.indexOf(a) >= 0 ? carrierStops.indexOf(a) : Infinity,
-            absorbedStops.indexOf(a) >= 0 ? absorbedStops.indexOf(a) : Infinity
-        );
-        const ib = Math.min(
-            carrierStops.indexOf(b) >= 0 ? carrierStops.indexOf(b) : Infinity,
-            absorbedStops.indexOf(b) >= 0 ? absorbedStops.indexOf(b) : Infinity
-        );
-        return ia - ib;
-    });
+    // 1. Evaluate route compatibility and construct unified stop sequence
+    const routeCheck = evaluateRouteCompatibility(carrierStops, absorbedStops);
+    if (!routeCheck.compatible) {
+        throw new Error(`Route incompatibility: ${routeCheck.reason}`);
+    }
 
-    const finalCurrentLoad = [];
-    const finalRemainingLoad = [];
+    const allStops = routeCheck.allStops;
 
-    for (const stop of allStops) {
-        const i1 = carrierStops.indexOf(stop);
-        const i2 = absorbedStops.indexOf(stop);
-        const l1 = i1 !== -1 ? (carrierCurrentLoad[i1] || 0) : 0;
-        const l2 = i2 !== -1 ? (absorbedCurrentLoad[i2] || 0) : 0;
-        const total = l1 + l2;
-        finalCurrentLoad.push(total);
-        finalRemainingLoad.push(Math.max(totalCapacity - total, 0));
+    // 2. Evaluate segment-by-segment load and capacity feasibility
+    const capacityCheck = evaluateSegmentCapacity(
+        carrierStops,
+        carrierCurrentLoad,
+        totalCapacity,
+        absorbedStops,
+        absorbedCurrentLoad,
+        allStops
+    );
+
+    if (!capacityCheck.feasible) {
+        throw new Error(`Insufficient capacity: ${capacityCheck.reason}`);
     }
 
     return {
@@ -76,10 +260,14 @@ function buildMergedData(pair, truckOne, truckTwo, existingCarrierSchedule = nul
         freeTruck,
         totalCapacity,
         allStops,
-        finalCurrentLoad,
-        finalRemainingLoad,
+        finalCurrentLoad: capacityCheck.finalCurrentLoad,
+        finalRemainingLoad: capacityCheck.finalRemainingLoad,
         finalSource: allStops[0],
         finalDestination: allStops[allStops.length - 1],
+        carrierStops,
+        carrierCurrentLoad,
+        absorbedStops,
+        absorbedCurrentLoad,
     };
 }
 
@@ -237,52 +425,34 @@ async function generateMergeablePairs() {
             const smallerStops = smaller.stops;
             if (!smallerStops.length) continue;
 
-            // Directional sub-sequence check: all stops of smaller must appear in bigger in the same order
-            let lastIdx = -1;
-            let isOrderedSubsequence = true;
-            for (const stop of smallerStops) {
-                const idx = biggerStops.indexOf(stop);
-                if (idx === -1 || idx <= lastIdx) {
-                    isOrderedSubsequence = false;
-                    break;
-                }
-                lastIdx = idx;
-            }
-            if (!isOrderedSubsequence) continue;
+            const routeCheck = evaluateRouteCompatibility(biggerStops, smallerStops);
+            if (!routeCheck.compatible) continue;
 
-            // Capacity feasibility check at each shared stop
-            let canMerge = true;
-            for (const stop of smallerStops) {
-                const ibig = biggerStops.indexOf(stop);
-                const ismall = smallerStops.indexOf(stop);
-                const remCap = bigger.remainingLoad[ibig] !== undefined
-                    ? bigger.remainingLoad[ibig]
-                    : (bigger.totalCapacity - (bigger.currentLoad[ibig] || 0));
-                const reqLoad = smaller.currentLoad[ismall] || 0;
+            const capacityCheck = evaluateSegmentCapacity(
+                biggerStops,
+                bigger.currentLoad,
+                bigger.totalCapacity,
+                smallerStops,
+                smaller.currentLoad,
+                routeCheck.allStops
+            );
+            if (!capacityCheck.feasible) continue;
 
-                if (remCap < reqLoad) {
-                    canMerge = false;
-                    break;
-                }
+            const key = `${bigger.id}-${smaller.id}`;
+            if (!existingSet.has(key)) {
+                newPairsToSave.push({
+                    truckOneId: bigger.truck._id,
+                    truckOneLicensePlate: bigger.licensePlate,
+                    truckOneStops: biggerStops,
+                    truckTwoId: smaller.truck._id,
+                    truckTwoLicensePlate: smaller.licensePlate,
+                    truckTwoStops: smallerStops,
+                });
+                existingSet.add(key);
             }
-
-            if (canMerge) {
-                const key = `${bigger.id}-${smaller.id}`;
-                if (!existingSet.has(key)) {
-                    newPairsToSave.push({
-                        truckOneId: bigger.truck._id,
-                        truckOneLicensePlate: bigger.licensePlate,
-                        truckOneStops: biggerStops,
-                        truckTwoId: smaller.truck._id,
-                        truckTwoLicensePlate: smaller.licensePlate,
-                        truckTwoStops: smallerStops,
-                    });
-                    existingSet.add(key);
-                }
-                usedTrucks.add(bigger.id);
-                usedTrucks.add(smaller.id);
-                break;
-            }
+            usedTrucks.add(bigger.id);
+            usedTrucks.add(smaller.id);
+            break;
         }
     }
 
@@ -297,16 +467,29 @@ async function generateMergeablePairs() {
  * Approves a mergeable pair, updating active schedules and releasing absorbed trucks.
  */
 async function executeAcceptPair(pairId) {
-    const pair = await MergeablePair.findById(pairId)
-        .populate('truckOneId')
-        .populate('truckTwoId');
+    // 1. Atomically consume the pair document to prevent double-submit or concurrent race conditions
+    const pair = await MergeablePair.findByIdAndDelete(pairId);
+    if (!pair) {
+        const err = new Error("This merge pair has already been processed or does not exist.");
+        err.statusCode = 409;
+        throw err;
+    }
 
-    if (!pair) throw new Error("Pair not found");
+    // 2. Fetch fresh truck data from database
+    const truckOne = await Truck.findById(pair.truckOneId);
+    const truckTwo = await Truck.findById(pair.truckTwoId);
+    if (!truckOne || !truckTwo) {
+        throw new Error("One or more trucks in this pair no longer exist.");
+    }
 
-    const truckOne = pair.truckOneId;
-    const truckTwo = pair.truckTwoId;
-    if (!truckOne || !truckTwo) throw new Error("Invalid truck data");
+    // 3. Prevent merging a truck that has already been released as a Free Truck
+    const isFreedOne = await FreeTruck.exists({ truckId: truckOne._id.toString() });
+    const isFreedTwo = await FreeTruck.exists({ truckId: truckTwo._id.toString() });
+    if (isFreedOne || isFreedTwo) {
+        throw new Error("One or more trucks in this pair have already been released as Free Trucks.");
+    }
 
+    // 4. Determine if one of the trucks is already an active carrier
     const existingSchedOne = await MergedSchedule.findOne({
         transportationTruckId: truckOne._id.toString(),
         status: 'accepted'
@@ -316,28 +499,64 @@ async function executeAcceptPair(pairId) {
         status: 'accepted'
     });
 
+    if (existingSchedOne && existingSchedTwo) {
+        throw new Error("Cannot merge two active carrier trucks with existing consolidated schedules.");
+    }
+
     const activeCarrierSchedule = existingSchedOne || existingSchedTwo || null;
 
+    // 5. Re-validate capacity and route, and calculate consolidated loads
     const { finalTruck, freeTruck, totalCapacity, allStops,
-        finalCurrentLoad, finalRemainingLoad, finalSource, finalDestination } =
+        finalCurrentLoad, finalRemainingLoad, finalSource, finalDestination,
+        carrierStops, carrierCurrentLoad, absorbedStops, absorbedCurrentLoad } =
         buildMergedData(pair, truckOne, truckTwo, activeCarrierSchedule);
 
     if (!finalSource || !finalDestination) {
         throw new Error("Invalid route data");
     }
 
+    // 6. Check if incoming truck is already in the carrier's manifest
+    if (activeCarrierSchedule && activeCarrierSchedule.mergedFromTrucks) {
+        const alreadyInManifest = activeCarrierSchedule.mergedFromTrucks.some(
+            t => t.id === freeTruck._id.toString()
+        );
+        if (alreadyInManifest) {
+            throw new Error(`Truck ${freeTruck.licensePlate} is already part of the carrier's manifest.`);
+        }
+    }
+
+    // 7. Look up individual route details to record detailed shipment tracking
+    const freeTruckRoute = await Route.findOne({ truckId: freeTruck._id });
+    const incomingShipment = {
+        id: freeTruck._id.toString(),
+        licensePlate: freeTruck.licensePlate,
+        companyId: freeTruck.companyId,
+        source: freeTruckRoute ? freeTruckRoute.source : (absorbedStops[0] || ""),
+        destination: freeTruckRoute ? freeTruckRoute.destination : (absorbedStops[absorbedStops.length - 1] || ""),
+        stops: absorbedStops,
+        load: absorbedCurrentLoad,
+        role: 'absorbed',
+    };
+
     let mergedSchedule;
     if (activeCarrierSchedule && activeCarrierSchedule.transportationTruckId === finalTruck._id.toString()) {
         // Consolidate into existing carrier schedule
-        const alreadyListed = activeCarrierSchedule.mergedFromTrucks.some(
-            t => t.id === freeTruck._id.toString()
-        );
-        if (!alreadyListed) {
-            activeCarrierSchedule.mergedFromTrucks.push({
-                licensePlate: freeTruck.licensePlate,
-                id: freeTruck._id.toString(),
-            });
+        if (!activeCarrierSchedule.mergedFromTrucks || !activeCarrierSchedule.mergedFromTrucks.length) {
+            const carrierRoute = await Route.findOne({ truckId: finalTruck._id });
+            activeCarrierSchedule.mergedFromTrucks = [
+                {
+                    id: finalTruck._id.toString(),
+                    licensePlate: finalTruck.licensePlate,
+                    companyId: finalTruck.companyId,
+                    source: carrierRoute ? carrierRoute.source : (carrierStops[0] || ""),
+                    destination: carrierRoute ? carrierRoute.destination : (carrierStops[carrierStops.length - 1] || ""),
+                    stops: carrierStops,
+                    load: carrierCurrentLoad,
+                    role: 'carrier',
+                }
+            ];
         }
+        activeCarrierSchedule.mergedFromTrucks.push(incomingShipment);
         activeCarrierSchedule.stops = allStops;
         activeCarrierSchedule.finalSource = finalSource;
         activeCarrierSchedule.finalDestination = finalDestination;
@@ -347,12 +566,22 @@ async function executeAcceptPair(pairId) {
         activeCarrierSchedule.status = 'accepted';
         mergedSchedule = await activeCarrierSchedule.save();
     } else {
+        const carrierRoute = await Route.findOne({ truckId: finalTruck._id });
         mergedSchedule = await MergedSchedule.create({
             transportationTruckId: finalTruck._id.toString(),
             transportationTruckLicensePlate: finalTruck.licensePlate,
             mergedFromTrucks: [
-                { licensePlate: finalTruck.licensePlate, id: finalTruck._id.toString() },
-                { licensePlate: freeTruck.licensePlate, id: freeTruck._id.toString() },
+                {
+                    id: finalTruck._id.toString(),
+                    licensePlate: finalTruck.licensePlate,
+                    companyId: finalTruck.companyId,
+                    source: carrierRoute ? carrierRoute.source : (carrierStops[0] || ""),
+                    destination: carrierRoute ? carrierRoute.destination : (carrierStops[carrierStops.length - 1] || ""),
+                    stops: carrierStops,
+                    load: carrierCurrentLoad,
+                    role: 'carrier',
+                },
+                incomingShipment,
             ],
             finalSource,
             finalDestination,
@@ -364,7 +593,7 @@ async function executeAcceptPair(pairId) {
         });
     }
 
-    // Synchronize carrier Truck and Route documents
+    // 8. Synchronize carrier Truck and Route documents
     await Truck.findByIdAndUpdate(finalTruck._id, {
         currentLoad: finalCurrentLoad,
         remainingLoad: finalRemainingLoad,
@@ -379,7 +608,7 @@ async function executeAcceptPair(pairId) {
         }
     );
 
-    // Reserve the absorbed truck into FreeTruck
+    // 9. Reserve the absorbed truck into FreeTruck (avoid duplicates)
     if (!await FreeTruck.exists({ truckId: freeTruck._id.toString() })) {
         await FreeTruck.create({
             licensePlate: freeTruck.licensePlate,
@@ -389,8 +618,7 @@ async function executeAcceptPair(pairId) {
         });
     }
 
-    // Clean up accepted pair and invalidate any conflicting pending pairs
-    await MergeablePair.findByIdAndDelete(pairId);
+    // 10. Invalidate any conflicting pending pairs involving the free truck or the carrier truck
     await MergeablePair.deleteMany({
         $or: [
             { truckOneId: freeTruck._id },
@@ -475,7 +703,7 @@ mergeRouter.post('/acceptPair/:id', adminAuth, async (req, res) => {
         res.json({ message: "Pair merged successfully", mergedSchedule });
     } catch (error) {
         console.error("Error accepting pair:", error);
-        res.status(500).json({ error: error.message });
+        res.status(error.statusCode || 500).json({ error: error.message });
     }
 });
 
@@ -564,5 +792,7 @@ mergeRouter.post('/mergeAllPairs', adminAuth, async (req, res) => {
 mergeRouter.buildMergedData = buildMergedData;
 mergeRouter.generateMergeablePairs = generateMergeablePairs;
 mergeRouter.executeAcceptPair = executeAcceptPair;
+mergeRouter.evaluateRouteCompatibility = evaluateRouteCompatibility;
+mergeRouter.evaluateSegmentCapacity = evaluateSegmentCapacity;
 
 module.exports = mergeRouter;

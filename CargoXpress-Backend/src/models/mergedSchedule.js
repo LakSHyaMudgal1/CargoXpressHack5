@@ -10,6 +10,21 @@ const mergedScheduleSchema = new Schema({
         type: String,
         required: true
     },
+    mergedFromTrucks: [
+        {
+            licensePlate: { type: String },
+            id: { type: String },
+            source: { type: String },
+            destination: { type: String },
+            stops: { type: [String] },
+            load: { type: [Number] },
+            companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'TransportCompany' },
+            role: { type: String, enum: ['carrier', 'absorbed'], default: 'absorbed' }
+        }
+    ],
+    totalCapacity: {
+        type: Number
+    },
     finalSource: {
         type: String,
         required: true

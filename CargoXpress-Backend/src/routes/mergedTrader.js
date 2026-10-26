@@ -19,7 +19,7 @@ traderRouter.get("/mergedTrader", adminAuth, async (req, res) => {
             return res.json({ message: "No trader requests found", traderMergedData: [] });
         }
 
-        // Skip requests already accepted or rejected
+        // 1. Skip requests already accepted or rejected
         const alreadyProcessed = await MergeableTrader.find({}, "traderRequestId");
         const processedIds = new Set(alreadyProcessed.map(t => t.traderRequestId));
 
@@ -29,30 +29,83 @@ traderRouter.get("/mergedTrader", adminAuth, async (req, res) => {
             return res.json({ message: "All trader requests have been processed", traderMergedData: [] });
         }
 
-        // Build truckId → { truck, route }
+        const FreeTruck = require("../models/freeTruck");
+        const MergedSchedule = require("../models/mergedSchedule");
+
+        // 2. Identify and exclude released / free trucks
+        const allFreeTrucks = await FreeTruck.find();
+        const freeTruckIds = new Set(allFreeTrucks.map(ft => ft.truckId.toString()));
+
+        // 3. Map active accepted carrier schedules for live routes & loads
+        const allAcceptedSchedules = await MergedSchedule.find({ status: 'accepted' });
+        const carrierScheduleMap = new Map();
+        allAcceptedSchedules.forEach(s => carrierScheduleMap.set(s.transportationTruckId, s));
+
+        // 4. Build available trucks with live routes and loads
         const allRoutes = await Route.find();
         const allTrucks = await Truck.find();
 
         const truckMap = new Map();
-        allTrucks.forEach(t => truckMap.set(t._id.toString(), { truck: t, route: null }));
+        allTrucks.forEach(t => {
+            const tid = t._id.toString();
+            if (!freeTruckIds.has(tid)) {
+                truckMap.set(tid, { truck: t, route: null, schedule: carrierScheduleMap.get(tid) || null });
+            }
+        });
+
         allRoutes.forEach(r => {
-            const e = truckMap.get(r.truckId.toString());
+            const tid = r.truckId.toString();
+            const e = truckMap.get(tid);
             if (e) e.route = r;
         });
 
-        const availableTrucks = Array.from(truckMap.values()).filter(
-            e => e.route && e.route.stops.length > 0
-        );
+        const availableTrucks = Array.from(truckMap.values()).map(e => {
+            const truck = e.truck;
+            const sched = e.schedule;
+            const stops = sched ? sched.stops : (e.route ? e.route.stops : []);
+            const currentLoad = sched ? (sched.finalCurrentLoad || []) : (truck.currentLoad || []);
+            const totalCapacity = sched ? (sched.totalCapacity || truck.totalCapacity) : truck.totalCapacity;
+            const remainingLoad = currentLoad.map(l => Math.max(totalCapacity - l, 0));
+
+            return {
+                truck,
+                route: e.route,
+                stops,
+                currentLoad,
+                remainingLoad,
+                totalCapacity,
+            };
+        }).filter(e => e.stops && e.stops.length > 0);
 
         const usedTruckIds = new Set();
         const traderMergedData = [];
 
         for (const request of pending) {
-            // Find a truck whose route fully covers trader's source → destination
+            // Find a truck whose route covers trader's source -> destination in forward order with capacity
             const matchIdx = availableTrucks.findIndex(e => {
                 if (usedTruckIds.has(e.truck._id.toString())) return false;
-                return e.route.stops.includes(request.source) &&
-                       e.route.stops.includes(request.destination);
+
+                const sIdx = e.stops.indexOf(request.source);
+                const dIdx = e.stops.indexOf(request.destination);
+                if (sIdx === -1 || dIdx === -1 || sIdx >= dIdx) return false;
+
+                // Validate intermediate stops appear in strictly forward order
+                let lastStopIdx = sIdx - 1;
+                for (let i = 0; i < request.stops.length; i++) {
+                    const stopName = request.stops[i];
+                    const idx = e.stops.indexOf(stopName);
+                    if (idx === -1 || idx <= lastStopIdx || idx > dIdx) return false;
+                    lastStopIdx = idx;
+
+                    // Validate segment capacity at each stop
+                    const addLoad = request.load[i] || 0;
+                    const curLoad = e.currentLoad[idx] || 0;
+                    if (curLoad + addLoad > e.totalCapacity) {
+                        return false;
+                    }
+                }
+
+                return true;
             });
 
             if (matchIdx !== -1) {
@@ -65,10 +118,10 @@ traderRouter.get("/mergedTrader", adminAuth, async (req, res) => {
                     traderEmail:       request.traderId?.emailId || "",
                     truckId:           matched.truck._id.toString(),
                     licensePlate:      matched.truck.licensePlate,
-                    truckTotalCapacity: matched.truck.totalCapacity,
-                    truckCurrentLoad:  matched.truck.currentLoad,
-                    truckRemainingLoad: matched.truck.remainingLoad,
-                    truckStops:        matched.route.stops,
+                    truckTotalCapacity: matched.totalCapacity,
+                    truckCurrentLoad:  matched.currentLoad,
+                    truckRemainingLoad: matched.remainingLoad,
+                    truckStops:        matched.stops,
                     load:              request.load,
                     source:            request.source,
                     destination:       request.destination,
@@ -107,25 +160,36 @@ traderRouter.post("/acceptTrader", adminAuth, async (req, res) => {
         const truck = await Truck.findById(truckId);
         if (truck) {
             const route = await Route.findOne({ truckId: truck._id });
-            const truckStops = route ? route.stops : [];
+            const MergedSchedule = require("../models/mergedSchedule");
+            const activeCarrierSchedule = await MergedSchedule.findOne({
+                transportationTruckId: truck._id.toString(),
+                status: 'accepted'
+            });
 
-            const newCurrentLoad  = [...truck.currentLoad];
-            const newRemainingLoad = [...truck.remainingLoad];
+            const truckStops = activeCarrierSchedule ? activeCarrierSchedule.stops : (route ? route.stops : []);
+            const baseCurrentLoad = activeCarrierSchedule ? (activeCarrierSchedule.finalCurrentLoad || []) : (truck.currentLoad || []);
+            const capacity = activeCarrierSchedule ? (activeCarrierSchedule.totalCapacity || truck.totalCapacity) : truck.totalCapacity;
 
-            // For each stop in the trader's request, add the trader's load to the
-            // corresponding index in the truck's stops array.
+            const newCurrentLoad = [...baseCurrentLoad];
+
+            // Segment-by-segment capacity validation
             for (let i = 0; i < stops.length; i++) {
-                const stopName  = stops[i];
-                const truckIdx  = truckStops.indexOf(stopName);
-                const addLoad   = load[i] || 0;
+                const stopName = stops[i];
+                const truckIdx = truckStops.indexOf(stopName);
+                const addLoad = load[i] || 0;
 
                 if (truckIdx !== -1) {
-                    newCurrentLoad[truckIdx]   = (newCurrentLoad[truckIdx]  || 0) + addLoad;
-                    newRemainingLoad[truckIdx] = Math.max(
-                        (newRemainingLoad[truckIdx] || 0) - addLoad, 0
-                    );
+                    const proposed = (newCurrentLoad[truckIdx] || 0) + addLoad;
+                    if (proposed > capacity) {
+                        return res.status(400).json({
+                            error: `Capacity exceeded at stop "${stopName}": required ${proposed} kg exceeds truck capacity ${capacity} kg.`
+                        });
+                    }
+                    newCurrentLoad[truckIdx] = proposed;
                 }
             }
+
+            const newRemainingLoad = newCurrentLoad.map(l => Math.max(capacity - l, 0));
 
             await Truck.findByIdAndUpdate(truckId, {
                 currentLoad:   newCurrentLoad,
