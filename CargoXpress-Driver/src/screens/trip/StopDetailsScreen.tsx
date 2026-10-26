@@ -53,6 +53,7 @@ export const StopDetailsScreen: React.FC = () => {
   const [partialWeightInput, setPartialWeightInput] = useState<string>('');
   const [partialReasonInput, setPartialReasonInput] = useState<string>('');
   const [deliveryNotes, setDeliveryNotes] = useState<string>('');
+  const [selectedShipmentId, setSelectedShipmentId] = useState<string>('ALL');
 
   const fetchStopDetails = useCallback(async () => {
     setError(null);
@@ -90,7 +91,9 @@ export const StopDetailsScreen: React.FC = () => {
       await fetchStopDetails();
     } catch (err: any) {
       setError(err.message || 'Status transition failed.');
-      Alert.alert('Transition Error', err.message || 'Could not update stop status.');
+      // Authoritative state refresh on failure or timeout
+      await fetchStopDetails();
+      Alert.alert('Transition Error', (err.message || 'Could not update stop status.') + ' Current server state refreshed.');
     } finally {
       setUpdating(false);
     }
@@ -109,7 +112,7 @@ export const StopDetailsScreen: React.FC = () => {
   };
 
   const submitDeliveryCompletion = async () => {
-    if (!recipientName.trim() && details?.stopType === 'delivery') {
+    if (!recipientName.trim() && (details?.stopType === 'delivery' || details?.stopType === 'pickup_delivery')) {
       Alert.alert('Recipient Name Required', 'Please enter the name of the person receiving the cargo.');
       return;
     }
@@ -132,13 +135,19 @@ export const StopDetailsScreen: React.FC = () => {
     if (isPartialDelivery && details?.shipments && details.shipments.length > 0) {
       const parsedWeight = parseFloat(partialWeightInput);
       if (isNaN(parsedWeight) || parsedWeight < 0) {
-        Alert.alert('Invalid Weight', 'Please provide a valid partial delivered weight.');
+        Alert.alert('Invalid Weight', 'Please provide a valid partial delivered weight in kg.');
         return;
       }
-      payload.shipmentUpdates = details.shipments.map(s => ({
+
+      const deliveryShipments = details.shipments.filter(s => s.operation === 'delivery');
+      const targetShipments = selectedShipmentId && selectedShipmentId !== 'ALL'
+        ? deliveryShipments.filter(s => s.shipmentId === selectedShipmentId)
+        : deliveryShipments;
+
+      payload.shipmentUpdates = targetShipments.map(s => ({
         shipmentId: s.shipmentId,
         status: 'partial',
-        deliveredWeightKg: parsedWeight,
+        deliveredWeightKg: Math.min(s.weightKg, parsedWeight),
         failureReason: partialReasonInput.trim() || 'Partial quantity accepted by consignee',
       }));
     }
@@ -583,6 +592,51 @@ export const StopDetailsScreen: React.FC = () => {
 
               {isPartialDelivery && (
                 <View style={styles.partialBox}>
+                  {details?.shipments && details.shipments.filter(s => s.operation === 'delivery').length > 1 && (
+                    <>
+                      <Text style={styles.inputLabel}>SELECT AFFECTED CONSIGNMENT</Text>
+                      <View style={styles.podTypeSelector}>
+                        <TouchableOpacity
+                          style={[
+                            styles.podTypeButton,
+                            selectedShipmentId === 'ALL' && styles.podTypeButtonActive,
+                          ]}
+                          onPress={() => setSelectedShipmentId('ALL')}
+                        >
+                          <Text
+                            style={[
+                              styles.podTypeButtonText,
+                              selectedShipmentId === 'ALL' && styles.podTypeButtonTextActive,
+                            ]}
+                          >
+                            ALL SHIPMENTS
+                          </Text>
+                        </TouchableOpacity>
+                        {details.shipments
+                          .filter(s => s.operation === 'delivery')
+                          .map(s => (
+                            <TouchableOpacity
+                              key={s.shipmentId}
+                              style={[
+                                styles.podTypeButton,
+                                selectedShipmentId === s.shipmentId && styles.podTypeButtonActive,
+                              ]}
+                              onPress={() => setSelectedShipmentId(s.shipmentId)}
+                            >
+                              <Text
+                                style={[
+                                  styles.podTypeButtonText,
+                                  selectedShipmentId === s.shipmentId && styles.podTypeButtonTextActive,
+                                ]}
+                              >
+                                {s.reference} ({s.weightKg}kg)
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                      </View>
+                    </>
+                  )}
+
                   <Text style={styles.inputLabel}>ACTUAL DELIVERED WEIGHT (KG) *</Text>
                   <TextInput
                     style={styles.singleInput}

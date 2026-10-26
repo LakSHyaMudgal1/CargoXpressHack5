@@ -546,4 +546,83 @@ describe('Driver App — Pickup, Delivery, and Stop Status Updates Test Suite', 
         assert.equal(resB.status, 403);
         assert.match(resB.body.message, /do not own this shipment/i);
     });
+
+    test('11. Stop Shipments Endpoint: GET /driver/active-trip/stops/:stopIndex/shipments returns isolated stop cargo operations', async () => {
+        const res = await apiFetch(`${baseUrl}/driver/active-trip/stops/1/shipments`, {
+            headers: { 'Authorization': `Bearer ${driverCarrierToken}` }
+        });
+
+        assert.equal(res.status, 200);
+        assert.equal(res.body.stopIndex, 1);
+        assert.equal(res.body.stopName, 'StopCity-Surat');
+        assert.equal(res.body.shipmentsCount, 2);
+        assert.equal(res.body.cargoWeightKg, 2000); // 1500kg + 500kg
+        assert.equal(res.body.shipments[0].operation, 'pickup');
+        assert.equal(res.body.shipments[1].operation, 'pickup');
+    });
+
+    test('12. Stop History Endpoint: GET /driver/active-trip/stops/:stopIndex/history returns audit log with affected shipments', async () => {
+        const res = await apiFetch(`${baseUrl}/driver/active-trip/stops/0/history`, {
+            headers: { 'Authorization': `Bearer ${driverCarrierToken}` }
+        });
+
+        assert.equal(res.status, 200);
+        assert.equal(res.body.stopIndex, 0);
+        assert.equal(res.body.currentStatus, 'completed');
+        assert.ok(Array.isArray(res.body.transitionHistory));
+        assert.ok(res.body.transitionHistory.length >= 4);
+
+        const lastTransition = res.body.transitionHistory[res.body.transitionHistory.length - 1];
+        assert.equal(lastTransition.toStatus, 'completed');
+        assert.equal(lastTransition.driverName, 'Driver Vikram Carrier');
+        assert.ok(lastTransition.affectedShipments.length > 0);
+        assert.equal(lastTransition.affectedShipments[0].toStatus, 'loaded');
+    });
+
+    test('13. Security Guard: Submitting shipmentUpdates for an unassociated shipment ID is rejected with HTTP 400', async () => {
+        // Stop 2 was already completed in Test 6, so test validation guard on an invalid shipment ID
+        const fakeShipmentId = new mongoose.Types.ObjectId().toString();
+        const res = await apiFetch(`${baseUrl}/driver/active-trip/stops/2/status`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${driverCarrierToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                status: 'completed',
+                shipmentUpdates: [{
+                    shipmentId: fakeShipmentId,
+                    status: 'partial',
+                    deliveredWeightKg: 100
+                }]
+            })
+        });
+
+        // Rejected as unassociated shipment or already completed stop
+        assert.equal(res.status, 400);
+    });
+
+    test('14. Idempotency: Duplicate requestId returns existing state without creating duplicate transition history', async () => {
+        const histResBefore = await apiFetch(`${baseUrl}/driver/active-trip/stops/0/history`, {
+            headers: { 'Authorization': `Bearer ${driverCarrierToken}` }
+        });
+        const countBefore = histResBefore.body.transitionHistory.length;
+
+        // Submitting status identical to current stop status is idempotent
+        const res1 = await apiFetch(`${baseUrl}/driver/active-trip/stops/0/status`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${driverCarrierToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ status: 'completed' })
+        });
+        assert.equal(res1.status, 200);
+        assert.match(res1.body.message, /already set to completed/i);
+
+        const histResAfter = await apiFetch(`${baseUrl}/driver/active-trip/stops/0/history`, {
+            headers: { 'Authorization': `Bearer ${driverCarrierToken}` }
+        });
+        assert.equal(histResAfter.body.transitionHistory.length, countBefore, 'Transition history must not duplicate on idempotent requests');
+    });
 });

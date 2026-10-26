@@ -22,6 +22,24 @@ export const stopApi = {
   },
 
   /**
+   * Fetch shipment operations and cargo items associated with a stop
+   */
+  getStopShipments: async (stopIndex: number) => {
+    return await apiClient.get<import('../types/stop').StopShipmentsResponse>(
+      `/driver/active-trip/stops/${stopIndex}/shipments`
+    );
+  },
+
+  /**
+   * Fetch transition audit history and shipment update log for a stop
+   */
+  getStopHistory: async (stopIndex: number) => {
+    return await apiClient.get<import('../types/stop').StopHistoryResponse>(
+      `/driver/active-trip/stops/${stopIndex}/history`
+    );
+  },
+
+  /**
    * Update operational status of a stop (en route, arrival, progress, completion, or failure)
    */
   updateStopStatus: async (

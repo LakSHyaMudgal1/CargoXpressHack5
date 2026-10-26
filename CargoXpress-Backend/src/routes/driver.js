@@ -1420,7 +1420,8 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
             return res.status(400).json({ message: "Invalid stop index format." });
         }
 
-        const { status, failureReason, notes, recipient, proofOfDelivery, shipmentUpdates } = req.body;
+        const { status, failureReason, notes, recipient, proofOfDelivery, shipmentUpdates, requestId } = req.body;
+        const reqId = requestId || req.headers['x-request-id'] || null;
 
         const validStatuses = ['pending', 'en_route', 'arrived', 'in_progress', 'completed', 'failed'];
         if (!status || !validStatuses.includes(status)) {
@@ -1473,6 +1474,32 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
             return res.status(404).json({ message: `Stop at index ${stopIndex} not found.` });
         }
 
+        // Deduplication via requestId
+        if (reqId) {
+            const alreadyProcessed = stop.transitionHistory.find(h => h.requestId === reqId);
+            if (alreadyProcessed) {
+                return res.status(200).json({
+                    message: `Request ${reqId} was already processed idempotently.`,
+                    stop,
+                    currentLoadOnBoard: execution.currentLoadOnBoard,
+                    totalDeliveredWeight: execution.totalDeliveredWeight,
+                    lifecycleStatus: execution.lifecycleStatus
+                });
+            }
+        }
+
+        // Verify that any shipments specified in shipmentUpdates actually belong to this stop
+        if (Array.isArray(shipmentUpdates) && shipmentUpdates.length > 0) {
+            for (const u of shipmentUpdates) {
+                const found = stop.shipments.find(s => s.shipmentId === u.shipmentId);
+                if (!found) {
+                    return res.status(400).json({
+                        message: `Shipment "${u.shipmentId}" is not associated with stop #${stopIndex + 1} ("${stop.stopName}").`
+                    });
+                }
+            }
+        }
+
         // Idempotent check
         if (stop.status === status) {
             return res.status(200).json({
@@ -1523,6 +1550,7 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
 
         const now = new Date();
         const oldStatus = stop.status;
+        const affectedShipments = [];
 
         // Apply status-specific logic
         if (status === 'arrived') {
@@ -1532,8 +1560,16 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
             stop.failureReason = failureReason.trim();
             // Mark all shipments at this stop as failed
             stop.shipments.forEach(s => {
+                const prevSStatus = s.status;
                 s.status = 'failed';
                 s.failureReason = failureReason.trim();
+                affectedShipments.push({
+                    shipmentId: s.shipmentId,
+                    operation: s.operation,
+                    fromStatus: prevSStatus,
+                    toStatus: 'failed',
+                    failureReason: failureReason.trim()
+                });
             });
         } else if (status === 'completed') {
             stop.completedAt = now;
@@ -1541,9 +1577,17 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
             // 1. Process Pickups at this stop: update ONLY shipments picked up here
             const pickups = stop.shipments.filter(s => s.operation === 'pickup');
             for (const p of pickups) {
+                const prevPStatus = p.status;
                 p.status = 'loaded';
                 p.completedAt = now;
                 execution.currentLoadOnBoard += (p.weightKg || 0);
+                affectedShipments.push({
+                    shipmentId: p.shipmentId,
+                    operation: 'pickup',
+                    fromStatus: prevPStatus,
+                    toStatus: 'loaded',
+                    deliveredWeightKg: null
+                });
             }
 
             // 2. Process Deliveries at this stop: update ONLY shipments delivered here
@@ -1569,11 +1613,12 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
                 }
 
                 for (const d of deliveries) {
+                    const prevDStatus = d.status;
                     const update = Array.isArray(shipmentUpdates)
                         ? shipmentUpdates.find(u => u.shipmentId === d.shipmentId)
                         : null;
 
-                    if (update && update.status === 'partial') {
+                    if (update && (update.status === 'partial' || update.status === 'partially_delivered')) {
                         const deliveredKg = Math.min(d.weightKg, Math.max(0, Number(update.deliveredWeightKg) || 0));
                         d.status = 'partial';
                         d.deliveredWeightKg = deliveredKg;
@@ -1581,16 +1626,39 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
                         d.completedAt = now;
                         execution.currentLoadOnBoard = Math.max(0, execution.currentLoadOnBoard - deliveredKg);
                         execution.totalDeliveredWeight += deliveredKg;
-                    } else if (update && update.status === 'failed') {
+                        affectedShipments.push({
+                            shipmentId: d.shipmentId,
+                            operation: 'delivery',
+                            fromStatus: prevDStatus,
+                            toStatus: 'partial',
+                            deliveredWeightKg: deliveredKg,
+                            failureReason: d.failureReason
+                        });
+                    } else if (update && (update.status === 'failed' || update.status === 'delivery_failed')) {
                         d.status = 'failed';
                         d.failureReason = update.failureReason || 'Recipient refused delivery';
                         d.completedAt = now;
+                        affectedShipments.push({
+                            shipmentId: d.shipmentId,
+                            operation: 'delivery',
+                            fromStatus: prevDStatus,
+                            toStatus: 'failed',
+                            deliveredWeightKg: 0,
+                            failureReason: d.failureReason
+                        });
                     } else {
                         d.status = 'delivered';
                         d.deliveredWeightKg = d.weightKg;
                         d.completedAt = now;
                         execution.currentLoadOnBoard = Math.max(0, execution.currentLoadOnBoard - (d.weightKg || 0));
                         execution.totalDeliveredWeight += (d.weightKg || 0);
+                        affectedShipments.push({
+                            shipmentId: d.shipmentId,
+                            operation: 'delivery',
+                            fromStatus: prevDStatus,
+                            toStatus: 'delivered',
+                            deliveredWeightKg: d.weightKg
+                        });
                     }
                 }
             }
@@ -1602,9 +1670,12 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
             toStatus: status,
             driverId: req.driver._id,
             driverName: req.driver.name,
+            actorRole: 'driver',
             timestamp: now,
             reason: failureReason || notes || null,
-            notes: notes ? notes.trim() : null
+            notes: notes ? notes.trim() : null,
+            requestId: reqId,
+            affectedShipments
         });
 
         stop.status = status;
@@ -1640,7 +1711,8 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
                 shipments: stop.shipments,
                 completedAt: stop.completedAt,
                 arrivedAt: stop.arrivedAt,
-                failedAt: stop.failedAt
+                failedAt: stop.failedAt,
+                transitionHistory: stop.transitionHistory
             },
             currentLoadOnBoard: execution.currentLoadOnBoard,
             totalDeliveredWeight: execution.totalDeliveredWeight,
@@ -1648,6 +1720,135 @@ driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, asy
         });
     } catch (err) {
         res.status(500).json({ message: "Failed to update stop status: " + err.message });
+    }
+});
+
+/**
+ * GET /driver/active-trip/stops/:stopIndex/shipments
+ * Retrieves shipment operations and consignment items associated specifically with this stop.
+ */
+driverRouter.get('/driver/active-trip/stops/:stopIndex/shipments', driverAuth, async (req, res) => {
+    try {
+        const stopIndex = parseInt(req.params.stopIndex, 10);
+        if (isNaN(stopIndex) || stopIndex < 0) {
+            return res.status(400).json({ message: "Invalid stop index format." });
+        }
+
+        const activeAssignment = await DriverAssignment.getActiveForDriver(req.driver._id);
+        if (!activeAssignment || !activeAssignment.truckId) {
+            return res.status(403).json({ message: "Access denied. You have no active vehicle assignment." });
+        }
+
+        const truck = activeAssignment.truckId;
+        const truckIdStr = truck._id.toString();
+
+        let activeTrip = await MergedSchedule.findOne({
+            transportationTruckId: truckIdStr,
+            status: 'accepted'
+        });
+        let tripType = 'MergedSchedule';
+
+        if (!activeTrip) {
+            activeTrip = await Route.findOne({ truckId: truck._id });
+            tripType = 'Route';
+        }
+
+        if (!activeTrip) {
+            return res.status(404).json({ message: "No active trip found for your vehicle." });
+        }
+
+        const execution = await TripStopExecution.getOrCreateExecution({
+            tripId: activeTrip._id,
+            tripType,
+            truckId: truck._id,
+            truckLicensePlate: truck.licensePlate,
+            companyId: truck.companyId,
+            activeTripDoc: activeTrip,
+            truckDoc: truck
+        });
+
+        const stop = execution.stops.find(s => s.stopIndex === stopIndex);
+        if (!stop) {
+            return res.status(404).json({ message: `Stop at index ${stopIndex} not found.` });
+        }
+
+        res.json({
+            tripId: activeTrip._id,
+            stopIndex: stop.stopIndex,
+            stopName: stop.stopName,
+            stopType: stop.stopType,
+            status: stop.status,
+            shipmentsCount: stop.shipments.length,
+            cargoWeightKg: stop.shipments.reduce((acc, s) => acc + (s.weightKg || 0), 0),
+            shipments: stop.shipments
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to fetch stop shipments: " + err.message });
+    }
+});
+
+/**
+ * GET /driver/active-trip/stops/:stopIndex/history
+ * Retrieves full transition audit history, timestamp log, and shipment update events for this stop.
+ */
+driverRouter.get('/driver/active-trip/stops/:stopIndex/history', driverAuth, async (req, res) => {
+    try {
+        const stopIndex = parseInt(req.params.stopIndex, 10);
+        if (isNaN(stopIndex) || stopIndex < 0) {
+            return res.status(400).json({ message: "Invalid stop index format." });
+        }
+
+        const activeAssignment = await DriverAssignment.getActiveForDriver(req.driver._id);
+        if (!activeAssignment || !activeAssignment.truckId) {
+            return res.status(403).json({ message: "Access denied. You have no active vehicle assignment." });
+        }
+
+        const truck = activeAssignment.truckId;
+        const truckIdStr = truck._id.toString();
+
+        let activeTrip = await MergedSchedule.findOne({
+            transportationTruckId: truckIdStr,
+            status: 'accepted'
+        });
+        let tripType = 'MergedSchedule';
+
+        if (!activeTrip) {
+            activeTrip = await Route.findOne({ truckId: truck._id });
+            tripType = 'Route';
+        }
+
+        if (!activeTrip) {
+            return res.status(404).json({ message: "No active trip found for your vehicle." });
+        }
+
+        const execution = await TripStopExecution.getOrCreateExecution({
+            tripId: activeTrip._id,
+            tripType,
+            truckId: truck._id,
+            truckLicensePlate: truck.licensePlate,
+            companyId: truck.companyId,
+            activeTripDoc: activeTrip,
+            truckDoc: truck
+        });
+
+        const stop = execution.stops.find(s => s.stopIndex === stopIndex);
+        if (!stop) {
+            return res.status(404).json({ message: `Stop at index ${stopIndex} not found.` });
+        }
+
+        res.json({
+            tripId: activeTrip._id,
+            stopIndex: stop.stopIndex,
+            stopName: stop.stopName,
+            currentStatus: stop.status,
+            arrivedAt: stop.arrivedAt,
+            completedAt: stop.completedAt,
+            failedAt: stop.failedAt,
+            lastUpdatedAt: stop.lastUpdatedAt,
+            transitionHistory: stop.transitionHistory
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to fetch stop history: " + err.message });
     }
 });
 

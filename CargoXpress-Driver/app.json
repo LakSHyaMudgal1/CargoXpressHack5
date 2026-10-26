@@ -7,15 +7,31 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cargoxpress.driver",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "location"
+        ],
+        "NSLocationWhenInUseUsageDescription": "CargoXpress requires location access during active freight trips to provide dispatch visibility and verify route progress.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "CargoXpress requires background location to track your active haul when the device screen is off or backgrounded."
+      }
     },
     "android": {
+      "package": "com.cargoxpress.driver",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {

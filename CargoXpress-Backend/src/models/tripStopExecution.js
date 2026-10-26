@@ -34,7 +34,13 @@ const shipmentItemSchema = new Schema({
     },
     status: {
         type: String,
-        enum: ['pending', 'loaded', 'delivered', 'partial', 'failed'],
+        enum: [
+            'pending', 'awaiting_pickup',
+            'loaded', 'picked_up', 'in_transit',
+            'delivered',
+            'partial', 'partially_delivered',
+            'failed', 'delivery_failed'
+        ],
         default: 'pending'
     },
     failureReason: {
@@ -65,6 +71,11 @@ const stopTransitionAuditSchema = new Schema({
         type: String,
         required: true
     },
+    actorRole: {
+        type: String,
+        enum: ['driver', 'admin', 'dispatcher', 'system'],
+        default: 'driver'
+    },
     timestamp: {
         type: Date,
         default: Date.now
@@ -77,6 +88,18 @@ const stopTransitionAuditSchema = new Schema({
         type: String,
         default: null
     },
+    requestId: {
+        type: String,
+        default: null
+    },
+    affectedShipments: [{
+        shipmentId: { type: String },
+        operation: { type: String },
+        fromStatus: { type: String },
+        toStatus: { type: String },
+        deliveredWeightKg: { type: Number, default: null },
+        failureReason: { type: String, default: null }
+    }],
     metadata: {
         type: Schema.Types.Mixed,
         default: {}

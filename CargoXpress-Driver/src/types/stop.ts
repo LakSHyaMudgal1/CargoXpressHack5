@@ -143,3 +143,26 @@ export interface UpdateStopStatusResponse {
   totalDeliveredWeight: number;
   lifecycleStatus: string;
 }
+
+export interface StopShipmentsResponse {
+  tripId: string;
+  stopIndex: number;
+  stopName: string;
+  stopType: StopType;
+  status: StopStatus;
+  shipmentsCount: number;
+  cargoWeightKg: number;
+  shipments: StopShipmentItem[];
+}
+
+export interface StopHistoryResponse {
+  tripId: string;
+  stopIndex: number;
+  stopName: string;
+  currentStatus: StopStatus;
+  arrivedAt?: string | null;
+  completedAt?: string | null;
+  failedAt?: string | null;
+  lastUpdatedAt: string;
+  transitionHistory: StopTransitionAudit[];
+}
