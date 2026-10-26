@@ -9,6 +9,8 @@ const Route = require('../models/route');
 const MergedSchedule = require('../models/mergedSchedule');
 const MergeablePair = require('../models/mergeablePair');
 const TransportCompany = require('../models/transportCompany');
+const MergeDecisionLog = require('../models/mergeDecisionLog');
+const { executeAcceptPair, buildMergedData } = require('./merge');
 
 const { driverAuth, companyAuth, adminAuth } = require('../middlewares/auth');
 
@@ -271,7 +273,8 @@ driverRouter.get('/driver/trip-details/:tripId', driverAuth, async (req, res) =>
 
 /**
  * GET /driver/merge-offers
- * Retrieves pending merge proposals that involve the driver's currently assigned vehicle.
+ * Retrieves pending merge proposals that involve the driver's currently assigned vehicle,
+ * populated with proposed consolidated stops, additional waypoints, and carrier role info.
  */
 driverRouter.get('/driver/merge-offers', driverAuth, async (req, res) => {
     try {
@@ -281,32 +284,350 @@ driverRouter.get('/driver/merge-offers', driverAuth, async (req, res) => {
         }
 
         const truckId = activeAssignment.truckId._id;
+        const truckIdStr = truckId.toString();
 
         const pairs = await MergeablePair.find({
             $or: [{ truckOneId: truckId }, { truckTwoId: truckId }]
         }).sort({ createdAt: -1 });
 
-        const formattedOffers = pairs.map(pair => {
-            const isTruckOne = pair.truckOneId.toString() === truckId.toString();
-            return {
-                pairId: pair._id,
-                myTruck: {
-                    id: truckId,
-                    licensePlate: isTruckOne ? pair.truckOneLicensePlate : pair.truckTwoLicensePlate,
-                    stops: isTruckOne ? pair.truckOneStops : pair.truckTwoStops
-                },
-                partnerTruck: {
-                    id: isTruckOne ? pair.truckTwoId : pair.truckOneId,
-                    licensePlate: isTruckOne ? pair.truckTwoLicensePlate : pair.truckOneLicensePlate,
-                    stops: isTruckOne ? pair.truckTwoStops : pair.truckOneStops
-                },
-                createdAt: pair.createdAt
-            };
-        });
+        const formattedOffers = [];
+
+        for (const pair of pairs) {
+            const isTruckOne = pair.truckOneId.toString() === truckIdStr;
+            const myStops = isTruckOne ? pair.truckOneStops : pair.truckTwoStops;
+            const partnerStops = isTruckOne ? pair.truckTwoStops : pair.truckOneStops;
+
+            try {
+                const truckOne = await Truck.findById(pair.truckOneId);
+                const truckTwo = await Truck.findById(pair.truckTwoId);
+                if (!truckOne || !truckTwo) continue;
+
+                const existingSchedOne = await MergedSchedule.findOne({
+                    transportationTruckId: truckOne._id.toString(),
+                    status: 'accepted'
+                });
+                const existingSchedTwo = await MergedSchedule.findOne({
+                    transportationTruckId: truckTwo._id.toString(),
+                    status: 'accepted'
+                });
+                const activeCarrierSchedule = existingSchedOne || existingSchedTwo || null;
+
+                const mergedData = buildMergedData(pair, truckOne, truckTwo, activeCarrierSchedule);
+                const finalTruck = mergedData.finalTruck;
+                const freeTruck = mergedData.freeTruck;
+                const isCarrier = (truckIdStr === finalTruck._id.toString());
+                const allStops = mergedData.allStops || [];
+                const carrierStops = mergedData.carrierStops || [];
+                const additionalStops = allStops.filter(s => !carrierStops.includes(s));
+
+                formattedOffers.push({
+                    pairId: pair._id,
+                    isCarrier,
+                    canAccept: isCarrier,
+                    role: isCarrier ? 'carrier' : 'absorbed',
+                    roleDescription: isCarrier
+                        ? 'Your vehicle is the designated carrier for this consolidated shipment'
+                        : 'Your vehicle cargo will be transferred to the carrier truck',
+                    myTruck: {
+                        id: truckId,
+                        licensePlate: isTruckOne ? pair.truckOneLicensePlate : pair.truckTwoLicensePlate,
+                        currentStops: myStops,
+                        currentLoad: (isTruckOne ? truckOne.currentLoad : truckTwo.currentLoad) || [],
+                        totalCapacity: isTruckOne ? truckOne.totalCapacity : truckTwo.totalCapacity
+                    },
+                    partnerTruck: {
+                        id: isTruckOne ? pair.truckTwoId : pair.truckOneId,
+                        licensePlate: isTruckOne ? pair.truckTwoLicensePlate : pair.truckOneLicensePlate,
+                        stops: partnerStops,
+                        load: (isTruckOne ? truckTwo.currentLoad : truckOne.currentLoad) || [],
+                        totalCapacity: isTruckOne ? truckTwo.totalCapacity : truckOne.totalCapacity
+                    },
+                    proposedRoute: {
+                        origin: allStops[0] || myStops[0],
+                        destination: allStops[allStops.length - 1] || myStops[myStops.length - 1],
+                        consolidatedStops: allStops,
+                        additionalStops,
+                        additionalStopsCount: additionalStops.length,
+                        projectedCurrentLoad: mergedData.finalCurrentLoad,
+                        projectedRemainingLoad: mergedData.finalRemainingLoad
+                    },
+                    incomingShipment: {
+                        licensePlate: freeTruck.licensePlate,
+                        origin: mergedData.absorbedStops[0] || "",
+                        destination: mergedData.absorbedStops[mergedData.absorbedStops.length - 1] || "",
+                        stops: mergedData.absorbedStops,
+                        loadKg: mergedData.absorbedCurrentLoad
+                    },
+                    createdAt: pair.createdAt
+                });
+            } catch (err) {
+                // If capacity or compatibility evaluation fails, display fallback card with details
+                formattedOffers.push({
+                    pairId: pair._id,
+                    isCarrier: false,
+                    canAccept: false,
+                    feasible: false,
+                    feasibilityError: err.message,
+                    myTruck: {
+                        id: truckId,
+                        licensePlate: isTruckOne ? pair.truckOneLicensePlate : pair.truckTwoLicensePlate,
+                        currentStops: myStops
+                    },
+                    partnerTruck: {
+                        id: isTruckOne ? pair.truckTwoId : pair.truckOneId,
+                        licensePlate: isTruckOne ? pair.truckTwoLicensePlate : pair.truckOneLicensePlate,
+                        stops: partnerStops
+                    },
+                    createdAt: pair.createdAt
+                });
+            }
+        }
 
         res.json({ offers: formattedOffers });
     } catch (err) {
         res.status(500).json({ message: "Failed to fetch merge offers: " + err.message });
+    }
+});
+
+/**
+ * POST /driver/merge-offers/:pairId/accept
+ * Driver accepts taking on additional cargo from a compatible truck.
+ * Requires driverAuth and verifies driver is actively assigned to the designated carrier vehicle.
+ */
+driverRouter.post('/driver/merge-offers/:pairId/accept', driverAuth, async (req, res) => {
+    try {
+        const { pairId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(pairId)) {
+            return res.status(400).json({ message: "Invalid merge offer ID format" });
+        }
+
+        // 1. Verify driver has an active vehicle assignment
+        const activeAssignment = await DriverAssignment.getActiveForDriver(req.driver._id);
+        if (!activeAssignment || !activeAssignment.truckId) {
+            return res.status(403).json({ message: "Access denied. You have no active vehicle assignment." });
+        }
+
+        const driverTruckId = activeAssignment.truckId._id.toString();
+
+        // 2. Fetch pair proposal
+        const pair = await MergeablePair.findById(pairId);
+        if (!pair) {
+            return res.status(409).json({
+                message: "This merge offer has already been processed, expired, or is no longer available."
+            });
+        }
+
+        // 3. Verify driver's vehicle is part of this pair
+        if (pair.truckOneId.toString() !== driverTruckId && pair.truckTwoId.toString() !== driverTruckId) {
+            return res.status(403).json({ message: "Access denied. You are not assigned to either vehicle in this proposed merge." });
+        }
+
+        // 4. Determine designated carrier vehicle
+        const truckOne = await Truck.findById(pair.truckOneId);
+        const truckTwo = await Truck.findById(pair.truckTwoId);
+        if (!truckOne || !truckTwo) {
+            return res.status(404).json({ message: "One or both vehicles in this pair no longer exist." });
+        }
+
+        const existingSchedOne = await MergedSchedule.findOne({
+            transportationTruckId: truckOne._id.toString(),
+            status: 'accepted'
+        });
+        const existingSchedTwo = await MergedSchedule.findOne({
+            transportationTruckId: truckTwo._id.toString(),
+            status: 'accepted'
+        });
+        const activeCarrierSchedule = existingSchedOne || existingSchedTwo || null;
+
+        let finalTruck = truckOne;
+        let freeTruck = truckTwo;
+        if (truckTwo.totalCapacity > truckOne.totalCapacity) {
+            finalTruck = truckTwo;
+            freeTruck = truckOne;
+        } else if (truckTwo.totalCapacity === truckOne.totalCapacity) {
+            if (activeCarrierSchedule && activeCarrierSchedule.transportationTruckId === truckTwo._id.toString()) {
+                finalTruck = truckTwo;
+                freeTruck = truckOne;
+            }
+        }
+
+        // 5. Decision Policy Enforcement: Only the carrier vehicle driver can accept the extra load
+        if (driverTruckId !== finalTruck._id.toString()) {
+            return res.status(403).json({
+                message: `Only the carrier vehicle driver (${finalTruck.licensePlate}) is authorized to accept taking on this consolidated cargo.`
+            });
+        }
+
+        // 6. Invoke canonical merge execution engine
+        const mergedSchedule = await executeAcceptPair(pairId);
+
+        // 7. Cleanly update absorbed truck driver assignment (freeTruck) to prevent dual conflicting active states
+        await DriverAssignment.updateMany(
+            { truckId: freeTruck._id, status: 'active' },
+            {
+                status: 'completed',
+                endedAt: new Date(),
+                notes: `Cargo absorbed into carrier truck ${finalTruck.licensePlate} (Driver: ${req.driver.name})`
+            }
+        );
+
+        // 8. Log the decision for operational auditing
+        await MergeDecisionLog.create({
+            pairId: pairId.toString(),
+            decision: 'accepted',
+            decidedByRole: 'driver',
+            driverId: req.driver._id,
+            driverName: req.driver.name,
+            carrierTruckId: finalTruck._id,
+            carrierLicensePlate: finalTruck.licensePlate,
+            absorbedTruckId: freeTruck._id,
+            absorbedLicensePlate: freeTruck.licensePlate,
+            notes: `Accepted by carrier driver ${req.driver.name}`
+        });
+
+        res.json({
+            message: "Merge offer accepted successfully. Your schedule has been updated with the consolidated cargo.",
+            mergedSchedule: {
+                id: mergedSchedule._id,
+                origin: mergedSchedule.finalSource,
+                destination: mergedSchedule.finalDestination,
+                stops: mergedSchedule.stops,
+                currentLoad: mergedSchedule.finalCurrentLoad,
+                remainingLoad: mergedSchedule.finalRemainingLoad,
+                totalCapacity: mergedSchedule.totalCapacity,
+                manifest: mergedSchedule.mergedFromTrucks
+            }
+        });
+    } catch (err) {
+        let statusCode = err.statusCode;
+        if (!statusCode) {
+            if (err.message.includes("already been processed")) {
+                statusCode = 409;
+            } else if (err.message.includes("capacity") || err.message.includes("compatible") || err.message.includes("itinerary") || err.message.includes("sequence")) {
+                statusCode = 400;
+            } else {
+                statusCode = 500;
+            }
+        }
+        res.status(statusCode).json({ message: "Failed to accept merge offer: " + err.message });
+    }
+});
+
+/**
+ * POST /driver/merge-offers/:pairId/reject
+ * Driver rejects a proposed merge offer with an explicit reason.
+ * Either involved driver can decline. The offer is atomically removed and independent dispatch is recorded.
+ */
+driverRouter.post('/driver/merge-offers/:pairId/reject', driverAuth, async (req, res) => {
+    try {
+        const { pairId } = req.params;
+        const { reason, notes } = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(pairId)) {
+            return res.status(400).json({ message: "Invalid merge offer ID format" });
+        }
+
+        if (!reason || typeof reason !== 'string' || !reason.trim()) {
+            return res.status(400).json({ message: "A rejection reason is required." });
+        }
+
+        // 1. Verify driver has active assignment
+        const activeAssignment = await DriverAssignment.getActiveForDriver(req.driver._id);
+        if (!activeAssignment || !activeAssignment.truckId) {
+            return res.status(403).json({ message: "Access denied. You have no active vehicle assignment." });
+        }
+
+        const driverTruckId = activeAssignment.truckId._id.toString();
+
+        // 2. Fetch pair proposal
+        const pair = await MergeablePair.findById(pairId);
+        if (!pair) {
+            return res.status(409).json({
+                message: "This merge offer has already been processed, expired, or is no longer available."
+            });
+        }
+
+        // 3. Verify driver's vehicle is part of this pair
+        if (pair.truckOneId.toString() !== driverTruckId && pair.truckTwoId.toString() !== driverTruckId) {
+            return res.status(403).json({ message: "Access denied. You are not assigned to either vehicle in this proposed merge." });
+        }
+
+        // 4. Atomically delete pair to prevent duplicate submissions or concurrent race conditions
+        const deletedPair = await MergeablePair.findByIdAndDelete(pairId);
+        if (!deletedPair) {
+            return res.status(409).json({
+                message: "This merge offer has already been processed or is no longer available."
+            });
+        }
+
+        // 5. Create independent schedules for both trucks if they don't already have accepted schedules
+        const truckOne = await Truck.findById(deletedPair.truckOneId);
+        const truckTwo = await Truck.findById(deletedPair.truckTwoId);
+
+        const makeIndependentSchedule = async (truck, stops) => {
+            if (!truck || !stops || !stops.length) return;
+            const hasAccepted = await MergedSchedule.findOne({
+                transportationTruckId: truck._id.toString(),
+                status: 'accepted'
+            });
+            if (hasAccepted) return;
+
+            const currentLoad = truck.currentLoad || [];
+            const remainingLoad = truck.remainingLoad || [];
+            await MergedSchedule.create({
+                transportationTruckId: truck._id.toString(),
+                transportationTruckLicensePlate: truck.licensePlate,
+                mergedFromTrucks: [],
+                finalSource: stops[0],
+                finalDestination: stops[stops.length - 1],
+                stops,
+                finalCurrentLoad: currentLoad.slice(0, stops.length),
+                finalRemainingLoad: remainingLoad.slice(0, stops.length),
+                totalCapacity: truck.totalCapacity,
+                status: 'rejected',
+            });
+        };
+
+        if (truckOne) await makeIndependentSchedule(truckOne, deletedPair.truckOneStops);
+        if (truckTwo) await makeIndependentSchedule(truckTwo, deletedPair.truckTwoStops);
+
+        // 6. Record the rejection in MergeDecisionLog for admin oversight
+        await MergeDecisionLog.create({
+            pairId: pairId.toString(),
+            decision: 'rejected',
+            decidedByRole: 'driver',
+            driverId: req.driver._id,
+            driverName: req.driver.name,
+            carrierTruckId: deletedPair.truckOneId,
+            carrierLicensePlate: deletedPair.truckOneLicensePlate,
+            absorbedTruckId: deletedPair.truckTwoId,
+            absorbedLicensePlate: deletedPair.truckTwoLicensePlate,
+            reason: reason.trim(),
+            notes: notes ? notes.trim() : null
+        });
+
+        res.json({
+            message: "Merge offer rejected. Both trucks will dispatch independently.",
+            reason: reason.trim()
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to reject merge offer: " + err.message });
+    }
+});
+
+/**
+ * GET /admin/merge-decisions
+ * Admin operational oversight: Lists historical merge decisions submitted by drivers and admins.
+ */
+driverRouter.get('/admin/merge-decisions', adminAuth, async (req, res) => {
+    try {
+        const decisions = await MergeDecisionLog.find()
+            .sort({ decidedAt: -1 })
+            .limit(50);
+        res.json({ decisions });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to fetch merge decision logs: " + err.message });
     }
 });
 

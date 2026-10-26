@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "CargoXpress-Driver",
+    "slug": "CargoXpress-Driver",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "CargoXpress requires location access during active freight trips to provide dispatch visibility and verify route progress.",
+          "locationAlwaysPermission": "CargoXpress requires background location to track your active haul when the device screen is off or backgrounded.",
+          "locationWhenInUsePermission": "CargoXpress requires location access during active freight trips to provide dispatch visibility and verify route progress.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
+    ]
+  }
+}

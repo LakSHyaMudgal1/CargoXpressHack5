@@ -64,10 +64,12 @@ app.use('/', mergedTraderRouter);
 app.use('/', driverRouter);
 
 
-// Vercel Serverless Handler
-if (isVercel) {
+// Vercel Serverless Handler & Module Export
+if (isVercel || require.main !== module) {
   module.exports = app;
-} else {
+}
+
+if (!isVercel && require.main === module) {
   // Local Development Mode
   connectDB()
     .then(() => {
