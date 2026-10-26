@@ -10,6 +10,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { tripApi } from '../../api/tripApi';
+import { stopApi } from '../../api/stopApi';
 import { THEME } from '../../constants/theme';
 import { AppNavigationProp } from '../../navigation/types';
 import { Header } from '../../components/Header';
@@ -20,10 +21,12 @@ import { ManifestCard } from '../../components/ManifestCard';
 import { TrackingCard } from '../../components/TrackingCard';
 import { EmptyState } from '../../components/EmptyState';
 import { ActiveTripResponse } from '../../types/trip';
+import { TripStopsResponse } from '../../types/stop';
 
 export const ActiveTripScreen: React.FC = () => {
   const navigation = useNavigation<AppNavigationProp>();
   const [tripData, setTripData] = useState<ActiveTripResponse | null>(null);
+  const [stopsData, setStopsData] = useState<TripStopsResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,8 +34,14 @@ export const ActiveTripScreen: React.FC = () => {
   const fetchActiveTrip = useCallback(async () => {
     setError(null);
     try {
-      const res = await tripApi.getActiveTrip();
-      setTripData(res);
+      const [resTrip, resStops] = await Promise.all([
+        tripApi.getActiveTrip(),
+        stopApi.getActiveTripStops().catch(() => null),
+      ]);
+      setTripData(resTrip);
+      if (resStops) {
+        setStopsData(resStops);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load route schedule.');
     } finally {
@@ -152,13 +161,18 @@ export const ActiveTripScreen: React.FC = () => {
             <Card style={styles.sectionCard}>
               <View style={styles.sectionHeader}>
                 <Ionicons name="git-commit-outline" size={20} color={THEME.colors.primaryLight} />
-                <Text style={styles.sectionTitle}>Ordered Stops & Load Distribution</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>Ordered Stops & Operational Milestones</Text>
+                  <Text style={styles.sectionSubtitle}>Tap any stop to record arrival, pickup, or delivery</Text>
+                </View>
               </View>
               <StopTimeline
                 stops={trip.stops}
+                richStops={stopsData?.stops}
                 currentLoads={trip.currentLoad}
                 remainingLoads={trip.remainingLoad}
-                nextStopIndex={1}
+                nextStopIndex={stopsData?.currentStopIndex !== undefined ? stopsData.currentStopIndex : 1}
+                onSelectStop={(idx, name) => navigation.navigate('StopDetails', { stopIndex: idx, stopName: name })}
               />
             </Card>
 
@@ -296,4 +310,11 @@ const styles = StyleSheet.create({
     ...THEME.typography.titleSmall,
     color: THEME.colors.text,
   },
+  sectionSubtitle: {
+    ...THEME.typography.caption,
+    fontSize: 11,
+    color: THEME.colors.textMuted,
+    marginTop: 1,
+  },
 });
+

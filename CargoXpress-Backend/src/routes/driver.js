@@ -11,9 +11,11 @@ const MergeablePair = require('../models/mergeablePair');
 const TransportCompany = require('../models/transportCompany');
 const MergeDecisionLog = require('../models/mergeDecisionLog');
 const DriverLocation = require('../models/driverLocation');
+const TripStopExecution = require('../models/tripStopExecution');
+const TraderRequest = require('../models/traderRequest');
 const { executeAcceptPair, buildMergedData } = require('./merge');
 
-const { driverAuth, companyAuth, adminAuth } = require('../middlewares/auth');
+const { driverAuth, companyAuth, adminAuth, traderAuth } = require('../middlewares/auth');
 
 // ─── DRIVER SELF-SERVICE ENDPOINTS (Requires driverAuth) ─────────────────────
 
@@ -1151,4 +1153,670 @@ driverRouter.get('/admin/driver-locations/:driverId/history', adminAuth, async (
     }
 });
 
+// ─── STOP STATUS & OPERATIONAL EXECUTION ENDPOINTS ──────────────────────────
+
+/**
+ * GET /driver/active-trip/stops
+ * Retrieves ordered stops, cargo manifests, current operational status,
+ * and valid actions for the authenticated driver's active trip.
+ */
+driverRouter.get('/driver/active-trip/stops', driverAuth, async (req, res) => {
+    try {
+        const activeAssignment = await DriverAssignment.getActiveForDriver(req.driver._id);
+        if (!activeAssignment || !activeAssignment.truckId) {
+            return res.status(403).json({
+                message: "Access denied. You have no active vehicle assignment."
+            });
+        }
+
+        const truck = activeAssignment.truckId;
+        const truckIdStr = truck._id.toString();
+
+        let activeTrip = await MergedSchedule.findOne({
+            transportationTruckId: truckIdStr,
+            status: 'accepted'
+        });
+        let tripType = 'MergedSchedule';
+
+        if (!activeTrip) {
+            activeTrip = await Route.findOne({ truckId: truck._id });
+            tripType = 'Route';
+        }
+
+        if (!activeTrip) {
+            return res.json({
+                stops: [],
+                message: "No active trip or route scheduled for your vehicle."
+            });
+        }
+
+        const execution = await TripStopExecution.getOrCreateExecution({
+            tripId: activeTrip._id,
+            tripType,
+            truckId: truck._id,
+            truckLicensePlate: truck.licensePlate,
+            companyId: truck.companyId,
+            activeTripDoc: activeTrip,
+            truckDoc: truck
+        });
+
+        // Compute current stop index
+        let currentStopIndex = 0;
+        for (let i = 0; i < execution.stops.length; i++) {
+            if (['pending', 'en_route', 'arrived', 'in_progress'].includes(execution.stops[i].status)) {
+                currentStopIndex = i;
+                break;
+            }
+            if (i === execution.stops.length - 1) {
+                currentStopIndex = i;
+            }
+        }
+
+        const formattedStops = execution.stops.map((stop, index) => {
+            const isCompleted = stop.status === 'completed';
+            const isFailed = stop.status === 'failed';
+            const isActive = !isCompleted && !isFailed && index === currentStopIndex;
+            const isUpcoming = index > currentStopIndex;
+
+            // Allowed next transitions based on FSM
+            let allowedNextActions = [];
+            if (stop.status === 'pending') {
+                const prevStop = index > 0 ? execution.stops[index - 1] : null;
+                const prevDone = !prevStop || prevStop.status === 'completed' || prevStop.status === 'failed';
+                if (prevDone) {
+                    allowedNextActions = ['en_route', 'arrived', 'failed'];
+                }
+            } else if (stop.status === 'en_route') {
+                allowedNextActions = ['arrived', 'failed'];
+            } else if (stop.status === 'arrived') {
+                allowedNextActions = ['in_progress', 'failed'];
+            } else if (stop.status === 'in_progress') {
+                allowedNextActions = ['completed', 'failed'];
+            }
+
+            return {
+                stopIndex: stop.stopIndex,
+                stopName: stop.stopName,
+                stopType: stop.stopType,
+                status: stop.status,
+                isCompleted,
+                isFailed,
+                isActive,
+                isUpcoming,
+                allowedNextActions,
+                shipmentsCount: stop.shipments.length,
+                cargoWeightKg: stop.shipments.reduce((acc, s) => acc + (s.weightKg || 0), 0),
+                shipments: stop.shipments.map(s => ({
+                    shipmentId: s.shipmentId,
+                    shipmentType: s.shipmentType,
+                    reference: s.reference,
+                    cargoDescription: s.cargoDescription,
+                    weightKg: s.weightKg,
+                    deliveredWeightKg: s.deliveredWeightKg,
+                    operation: s.operation,
+                    status: s.status,
+                    failureReason: s.failureReason,
+                    completedAt: s.completedAt
+                })),
+                recipient: stop.recipient,
+                proofOfDelivery: stop.proofOfDelivery ? {
+                    type: stop.proofOfDelivery.type,
+                    verificationStatus: stop.proofOfDelivery.verificationStatus,
+                    submittedAt: stop.proofOfDelivery.submittedAt
+                } : null,
+                failureReason: stop.failureReason,
+                notes: stop.notes,
+                arrivedAt: stop.arrivedAt,
+                completedAt: stop.completedAt,
+                failedAt: stop.failedAt,
+                lastUpdatedAt: stop.lastUpdatedAt
+            };
+        });
+
+        res.json({
+            tripId: activeTrip._id,
+            tripType,
+            truck: {
+                id: truck._id,
+                licensePlate: truck.licensePlate,
+                totalCapacity: activeTrip.totalCapacity || truck.totalCapacity
+            },
+            currentStopIndex,
+            currentLoadOnBoard: execution.currentLoadOnBoard,
+            totalDeliveredWeight: execution.totalDeliveredWeight,
+            lifecycleStatus: execution.lifecycleStatus,
+            stops: formattedStops
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to fetch trip stops: " + err.message });
+    }
+});
+
+/**
+ * GET /driver/active-trip/stops/:stopIndex
+ * Retrieves detailed stop instructions, shipments, and allowed transitions.
+ */
+driverRouter.get('/driver/active-trip/stops/:stopIndex', driverAuth, async (req, res) => {
+    try {
+        const stopIndex = parseInt(req.params.stopIndex, 10);
+        if (isNaN(stopIndex) || stopIndex < 0) {
+            return res.status(400).json({ message: "Invalid stop index format." });
+        }
+
+        const activeAssignment = await DriverAssignment.getActiveForDriver(req.driver._id);
+        if (!activeAssignment || !activeAssignment.truckId) {
+            return res.status(403).json({ message: "Access denied. You have no active vehicle assignment." });
+        }
+
+        const truck = activeAssignment.truckId;
+        const truckIdStr = truck._id.toString();
+
+        let activeTrip = await MergedSchedule.findOne({
+            transportationTruckId: truckIdStr,
+            status: 'accepted'
+        });
+        let tripType = 'MergedSchedule';
+
+        if (!activeTrip) {
+            activeTrip = await Route.findOne({ truckId: truck._id });
+            tripType = 'Route';
+        }
+
+        if (!activeTrip) {
+            return res.status(404).json({ message: "No active trip found for your vehicle." });
+        }
+
+        const execution = await TripStopExecution.getOrCreateExecution({
+            tripId: activeTrip._id,
+            tripType,
+            truckId: truck._id,
+            truckLicensePlate: truck.licensePlate,
+            companyId: truck.companyId,
+            activeTripDoc: activeTrip,
+            truckDoc: truck
+        });
+
+        const stop = execution.stops.find(s => s.stopIndex === stopIndex);
+        if (!stop) {
+            return res.status(404).json({ message: `Stop at index ${stopIndex} not found.` });
+        }
+
+        let allowedNextActions = [];
+        if (stop.status === 'pending') {
+            const prevStop = stopIndex > 0 ? execution.stops[stopIndex - 1] : null;
+            const prevDone = !prevStop || prevStop.status === 'completed' || prevStop.status === 'failed';
+            if (prevDone) {
+                allowedNextActions = ['en_route', 'arrived', 'failed'];
+            }
+        } else if (stop.status === 'en_route') {
+            allowedNextActions = ['arrived', 'failed'];
+        } else if (stop.status === 'arrived') {
+            allowedNextActions = ['in_progress', 'failed'];
+        } else if (stop.status === 'in_progress') {
+            allowedNextActions = ['completed', 'failed'];
+        }
+
+        let instructions = [];
+        if (stop.stopType === 'pickup') {
+            instructions = [
+                "Inspect cargo packaging and check seal numbers against the consignment list.",
+                "Ensure cargo is weighed and verified before loading.",
+                "Secure freight with ratchet straps and close container doors securely."
+            ];
+        } else if (stop.stopType === 'delivery') {
+            instructions = [
+                "Verify recipient identity and collect recipient contact information.",
+                "Obtain Proof of Delivery (recipient signature, OTP code, or handover photo).",
+                "Have recipient inspect cargo condition before signing."
+            ];
+        } else if (stop.stopType === 'pickup_delivery') {
+            instructions = [
+                "Complete unloading and sign-off of delivery cargo first.",
+                "Verify container space is clear before loading new pickup cargo.",
+                "Verify consignment documents for newly loaded shipments."
+            ];
+        } else {
+            instructions = [
+                "Transit waypoint stop for inspection, toll, or mandatory rest check.",
+                "Verify vehicle condition and tire pressure."
+            ];
+        }
+
+        res.json({
+            tripId: activeTrip._id,
+            tripType,
+            stopIndex: stop.stopIndex,
+            stopName: stop.stopName,
+            stopType: stop.stopType,
+            status: stop.status,
+            failureReason: stop.failureReason,
+            notes: stop.notes,
+            instructions,
+            allowedNextActions,
+            currentLoadOnBoard: execution.currentLoadOnBoard,
+            shipments: stop.shipments,
+            recipient: stop.recipient,
+            proofOfDelivery: stop.proofOfDelivery,
+            arrivedAt: stop.arrivedAt,
+            completedAt: stop.completedAt,
+            failedAt: stop.failedAt,
+            lastUpdatedAt: stop.lastUpdatedAt,
+            transitionHistory: stop.transitionHistory
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to fetch stop details: " + err.message });
+    }
+});
+
+/**
+ * POST /driver/active-trip/stops/:stopIndex/status
+ * Updates operational status of a stop with FSM validation, atomic cargo updates,
+ * proof of delivery ingest, and immutable audit logs.
+ */
+driverRouter.post('/driver/active-trip/stops/:stopIndex/status', driverAuth, async (req, res) => {
+    try {
+        const stopIndex = parseInt(req.params.stopIndex, 10);
+        if (isNaN(stopIndex) || stopIndex < 0) {
+            return res.status(400).json({ message: "Invalid stop index format." });
+        }
+
+        const { status, failureReason, notes, recipient, proofOfDelivery, shipmentUpdates } = req.body;
+
+        const validStatuses = ['pending', 'en_route', 'arrived', 'in_progress', 'completed', 'failed'];
+        if (!status || !validStatuses.includes(status)) {
+            return res.status(400).json({
+                message: `Invalid status "${status}". Allowed values: ${validStatuses.join(', ')}`
+            });
+        }
+
+        if (status === 'failed' && (!failureReason || typeof failureReason !== 'string' || !failureReason.trim())) {
+            return res.status(400).json({
+                message: "A failureReason is required when marking a stop as failed."
+            });
+        }
+
+        const activeAssignment = await DriverAssignment.getActiveForDriver(req.driver._id);
+        if (!activeAssignment || !activeAssignment.truckId) {
+            return res.status(403).json({ message: "Access denied. You have no active vehicle assignment." });
+        }
+
+        const truck = activeAssignment.truckId;
+        const truckIdStr = truck._id.toString();
+
+        let activeTrip = await MergedSchedule.findOne({
+            transportationTruckId: truckIdStr,
+            status: 'accepted'
+        });
+        let tripType = 'MergedSchedule';
+
+        if (!activeTrip) {
+            activeTrip = await Route.findOne({ truckId: truck._id });
+            tripType = 'Route';
+        }
+
+        if (!activeTrip) {
+            return res.status(404).json({ message: "No active trip found for your vehicle." });
+        }
+
+        const execution = await TripStopExecution.getOrCreateExecution({
+            tripId: activeTrip._id,
+            tripType,
+            truckId: truck._id,
+            truckLicensePlate: truck.licensePlate,
+            companyId: truck.companyId,
+            activeTripDoc: activeTrip,
+            truckDoc: truck
+        });
+
+        const stop = execution.stops.find(s => s.stopIndex === stopIndex);
+        if (!stop) {
+            return res.status(404).json({ message: `Stop at index ${stopIndex} not found.` });
+        }
+
+        // Idempotent check
+        if (stop.status === status) {
+            return res.status(200).json({
+                message: `Stop status is already set to ${status}.`,
+                stop,
+                currentLoadOnBoard: execution.currentLoadOnBoard
+            });
+        }
+
+        // Terminal state guards
+        if (stop.status === 'completed') {
+            return res.status(400).json({
+                message: "Stop is already completed and cannot be reverted or modified."
+            });
+        }
+
+        if (stop.status === 'failed') {
+            return res.status(400).json({
+                message: "Stop is marked as failed and cannot be modified."
+            });
+        }
+
+        // FSM transition validation
+        if (!TripStopExecution.isValidTransition(stop.status, status)) {
+            return res.status(400).json({
+                message: `Invalid state transition from "${stop.status}" to "${status}". Operational steps must be followed in sequence.`
+            });
+        }
+
+        // Operational prerequisite check: Must arrive and start progress before completing
+        if (status === 'completed' && stop.status !== 'in_progress' && stop.status !== 'arrived') {
+            return res.status(400).json({
+                message: "Operational steps must be followed: stop must be in 'arrived' or 'in_progress' state before completion."
+            });
+        }
+
+        // Sequential integrity: Cannot execute stop if previous stop is unresolved
+        if (stopIndex > 0) {
+            for (let p = 0; p < stopIndex; p++) {
+                const prev = execution.stops[p];
+                if (prev.status !== 'completed' && prev.status !== 'failed') {
+                    return res.status(400).json({
+                        message: `Preceding stop #${p + 1} ("${prev.stopName}") is currently "${prev.status}". It must be completed or resolved before proceeding.`
+                    });
+                }
+            }
+        }
+
+        const now = new Date();
+        const oldStatus = stop.status;
+
+        // Apply status-specific logic
+        if (status === 'arrived') {
+            stop.arrivedAt = now;
+        } else if (status === 'failed') {
+            stop.failedAt = now;
+            stop.failureReason = failureReason.trim();
+            // Mark all shipments at this stop as failed
+            stop.shipments.forEach(s => {
+                s.status = 'failed';
+                s.failureReason = failureReason.trim();
+            });
+        } else if (status === 'completed') {
+            stop.completedAt = now;
+
+            // 1. Process Pickups at this stop: update ONLY shipments picked up here
+            const pickups = stop.shipments.filter(s => s.operation === 'pickup');
+            for (const p of pickups) {
+                p.status = 'loaded';
+                p.completedAt = now;
+                execution.currentLoadOnBoard += (p.weightKg || 0);
+            }
+
+            // 2. Process Deliveries at this stop: update ONLY shipments delivered here
+            const deliveries = stop.shipments.filter(s => s.operation === 'delivery');
+            if (deliveries.length > 0) {
+                if (recipient && typeof recipient === 'object') {
+                    stop.recipient = {
+                        name: recipient.name || null,
+                        phone: recipient.phone || null,
+                        notes: recipient.notes || null
+                    };
+                }
+
+                if (proofOfDelivery && typeof proofOfDelivery === 'object') {
+                    stop.proofOfDelivery = {
+                        type: proofOfDelivery.type || 'acknowledgement',
+                        verificationStatus: 'driver_reported', // Driver-reported until independent audit
+                        otpCode: proofOfDelivery.otpCode || null,
+                        signatureData: proofOfDelivery.signatureData || null,
+                        photoReference: proofOfDelivery.photoReference || null,
+                        submittedAt: now
+                    };
+                }
+
+                for (const d of deliveries) {
+                    const update = Array.isArray(shipmentUpdates)
+                        ? shipmentUpdates.find(u => u.shipmentId === d.shipmentId)
+                        : null;
+
+                    if (update && update.status === 'partial') {
+                        const deliveredKg = Math.min(d.weightKg, Math.max(0, Number(update.deliveredWeightKg) || 0));
+                        d.status = 'partial';
+                        d.deliveredWeightKg = deliveredKg;
+                        d.failureReason = update.failureReason || 'Partial consignment delivered';
+                        d.completedAt = now;
+                        execution.currentLoadOnBoard = Math.max(0, execution.currentLoadOnBoard - deliveredKg);
+                        execution.totalDeliveredWeight += deliveredKg;
+                    } else if (update && update.status === 'failed') {
+                        d.status = 'failed';
+                        d.failureReason = update.failureReason || 'Recipient refused delivery';
+                        d.completedAt = now;
+                    } else {
+                        d.status = 'delivered';
+                        d.deliveredWeightKg = d.weightKg;
+                        d.completedAt = now;
+                        execution.currentLoadOnBoard = Math.max(0, execution.currentLoadOnBoard - (d.weightKg || 0));
+                        execution.totalDeliveredWeight += (d.weightKg || 0);
+                    }
+                }
+            }
+        }
+
+        // Append transition audit log
+        stop.transitionHistory.push({
+            fromStatus: oldStatus,
+            toStatus: status,
+            driverId: req.driver._id,
+            driverName: req.driver.name,
+            timestamp: now,
+            reason: failureReason || notes || null,
+            notes: notes ? notes.trim() : null
+        });
+
+        stop.status = status;
+        stop.lastUpdatedAt = now;
+        if (notes && typeof notes === 'string') {
+            stop.notes = notes.trim();
+        }
+
+        // Update overall trip lifecycle
+        const allDone = execution.stops.every(s => s.status === 'completed' || s.status === 'failed');
+        if (allDone) {
+            execution.lifecycleStatus = 'completed';
+        } else if (execution.lifecycleStatus === 'scheduled' && status !== 'pending') {
+            execution.lifecycleStatus = 'in_transit';
+        }
+
+        await execution.save();
+
+        res.json({
+            message: `Stop #${stopIndex + 1} (${stop.stopName}) status updated to "${status}".`,
+            stop: {
+                stopIndex: stop.stopIndex,
+                stopName: stop.stopName,
+                stopType: stop.stopType,
+                status: stop.status,
+                failureReason: stop.failureReason,
+                recipient: stop.recipient,
+                proofOfDelivery: stop.proofOfDelivery ? {
+                    type: stop.proofOfDelivery.type,
+                    verificationStatus: stop.proofOfDelivery.verificationStatus,
+                    submittedAt: stop.proofOfDelivery.submittedAt
+                } : null,
+                shipments: stop.shipments,
+                completedAt: stop.completedAt,
+                arrivedAt: stop.arrivedAt,
+                failedAt: stop.failedAt
+            },
+            currentLoadOnBoard: execution.currentLoadOnBoard,
+            totalDeliveredWeight: execution.totalDeliveredWeight,
+            lifecycleStatus: execution.lifecycleStatus
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to update stop status: " + err.message });
+    }
+});
+
+/**
+ * GET /admin/trip-stops/:tripId
+ * Central dispatch inspection: Retrieves full execution lifecycle, proof of delivery,
+ * and immutable transition audit logs for any trip.
+ */
+driverRouter.get('/admin/trip-stops/:tripId', adminAuth, async (req, res) => {
+    try {
+        const { tripId } = req.params;
+
+        let execution = await TripStopExecution.findOne({ tripId });
+        if (!execution) {
+            // Attempt to build if active MergedSchedule or Route exists
+            const MergedSchedule = mongoose.model('MergedSchedule');
+            const Route = mongoose.model('Route');
+
+            let tripDoc = await MergedSchedule.findById(tripId);
+            let tripType = 'MergedSchedule';
+
+            if (!tripDoc) {
+                tripDoc = await Route.findById(tripId);
+                tripType = 'Route';
+            }
+
+            if (!tripDoc) {
+                return res.status(404).json({ message: "Trip not found." });
+            }
+
+            const truckId = tripType === 'MergedSchedule' ? tripDoc.transportationTruckId : tripDoc.truckId;
+            const truck = await Truck.findById(truckId);
+
+            execution = await TripStopExecution.getOrCreateExecution({
+                tripId,
+                tripType,
+                truckId: truck ? truck._id : new mongoose.Types.ObjectId(),
+                truckLicensePlate: truck ? truck.licensePlate : 'TRUCK',
+                companyId: truck ? truck.companyId : null,
+                activeTripDoc: tripDoc,
+                truckDoc: truck
+            });
+        }
+
+        res.json({
+            tripId: execution.tripId,
+            tripType: execution.tripType,
+            truckLicensePlate: execution.truckLicensePlate,
+            lifecycleStatus: execution.lifecycleStatus,
+            currentLoadOnBoard: execution.currentLoadOnBoard,
+            totalDeliveredWeight: execution.totalDeliveredWeight,
+            stops: execution.stops
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to fetch trip execution details: " + err.message });
+    }
+});
+
+/**
+ * GET /trader/shipment-status/:traderRequestId
+ * Trader shipment tracking: Provides status, current carrier, stop milestones,
+ * and delivery confirmation without exposing unrelated carrier or cargo data.
+ */
+driverRouter.get('/trader/shipment-status/:traderRequestId', traderAuth, async (req, res) => {
+    try {
+        const { traderRequestId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(traderRequestId)) {
+            return res.status(400).json({ message: "Invalid trader request ID format." });
+        }
+
+        const traderRequest = await TraderRequest.findById(traderRequestId);
+        if (!traderRequest) {
+            return res.status(404).json({ message: "Trader request not found." });
+        }
+
+        // Authorization: Verify trader owns this request
+        if (traderRequest.traderId.toString() !== req.trader._id.toString()) {
+            return res.status(403).json({ message: "Access denied. You do not own this shipment request." });
+        }
+
+        const reqWeight = Array.isArray(traderRequest.load) && traderRequest.load.length > 0 ? traderRequest.load[0] : 0;
+
+        // Search for execution document containing this shipment
+        const execution = await TripStopExecution.findOne({
+            'stops.shipments.shipmentId': traderRequestId
+        });
+
+        if (!execution) {
+            return res.json({
+                traderRequestId,
+                source: traderRequest.source,
+                destination: traderRequest.destination,
+                weightKg: reqWeight,
+                status: 'pending_dispatch',
+                statusLabel: 'Pending Truck Assignment & Dispatch',
+                carrierTruckLicensePlate: null,
+                milestones: []
+            });
+        }
+
+        // Find pickup and delivery stops
+        let pickupStop = null;
+        let deliveryStop = null;
+
+        for (const stop of execution.stops) {
+            for (const s of stop.shipments) {
+                if (s.shipmentId === traderRequestId) {
+                    if (s.operation === 'pickup') pickupStop = stop;
+                    if (s.operation === 'delivery') deliveryStop = stop;
+                }
+            }
+        }
+
+        let overallStatus = 'in_transit';
+        let statusLabel = 'In Transit';
+
+        if (deliveryStop && deliveryStop.status === 'completed') {
+            overallStatus = 'delivered';
+            statusLabel = 'Delivered to Destination';
+        } else if (deliveryStop && deliveryStop.status === 'failed') {
+            overallStatus = 'delivery_failed';
+            statusLabel = 'Delivery Attempt Failed';
+        } else if (pickupStop && pickupStop.status === 'completed') {
+            overallStatus = 'in_transit';
+            statusLabel = 'Picked Up & On Highway Route';
+        } else if (pickupStop && (pickupStop.status === 'in_progress' || pickupStop.status === 'arrived')) {
+            overallStatus = 'pickup_in_progress';
+            statusLabel = 'Truck Arrived for Cargo Pickup';
+        } else if (pickupStop && pickupStop.status === 'failed') {
+            overallStatus = 'pickup_failed';
+            statusLabel = 'Pickup Failed at Origin';
+        } else {
+            overallStatus = 'scheduled';
+            statusLabel = 'Assigned to Vehicle — Scheduled';
+        }
+
+        // Return clean milestones without exposing other consolidated shipments
+        const milestones = execution.stops.map(st => ({
+            stopName: st.stopName,
+            stopType: st.stopType,
+            status: st.status,
+            arrivedAt: st.arrivedAt,
+            completedAt: st.completedAt
+        }));
+
+        res.json({
+            traderRequestId,
+            source: traderRequest.source,
+            destination: traderRequest.destination,
+            weightKg: reqWeight,
+            status: overallStatus,
+            statusLabel,
+            carrierTruckLicensePlate: execution.truckLicensePlate,
+            pickupStopName: pickupStop?.stopName || traderRequest.source,
+            deliveryStopName: deliveryStop?.stopName || traderRequest.destination,
+            pickedUpAt: pickupStop?.completedAt || null,
+            deliveredAt: deliveryStop?.completedAt || null,
+            proofOfDelivery: deliveryStop?.proofOfDelivery ? {
+                type: deliveryStop.proofOfDelivery.type,
+                verificationStatus: deliveryStop.proofOfDelivery.verificationStatus,
+                submittedAt: deliveryStop.proofOfDelivery.submittedAt
+            } : null,
+            milestones
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to fetch trader shipment status: " + err.message });
+    }
+});
+
 module.exports = driverRouter;
+

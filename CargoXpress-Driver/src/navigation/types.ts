@@ -6,6 +6,7 @@ export type RootStackParamList = {
   Dashboard: undefined;
   ActiveTrip: undefined;
   TripDetails: { tripId: string };
+  StopDetails: { stopIndex: number; stopName: string };
   MergeOffers: undefined;
   Profile: undefined;
 };
@@ -13,3 +14,5 @@ export type RootStackParamList = {
 export type AppNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export type TripDetailsRouteProp = RouteProp<RootStackParamList, 'TripDetails'>;
+export type StopDetailsRouteProp = RouteProp<RootStackParamList, 'StopDetails'>;
+

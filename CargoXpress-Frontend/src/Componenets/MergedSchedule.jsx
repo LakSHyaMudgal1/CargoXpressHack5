@@ -1,5 +1,21 @@
 import React, { useState, useEffect } from "react";
-import { Truck, Navigation, Package, PackageCheck, GitMerge, BarChart3, Users, CheckCircle2, XCircle } from "lucide-react";
+import {
+  Truck,
+  Navigation,
+  Package,
+  PackageCheck,
+  GitMerge,
+  BarChart3,
+  Users,
+  CheckCircle2,
+  XCircle,
+  ShieldCheck,
+  Clock,
+  MapPin,
+  X,
+  AlertCircle,
+  FileText
+} from "lucide-react";
 import axios from "axios";
 import { BASE_URL } from "../utils/constants";
 import Pagination from "./Pagination";
@@ -13,6 +29,42 @@ const MergedSchedule = () => {
   const [currentPageRejected, setCurrentPageRejected] = useState(1);
   const [currentPageTraders, setCurrentPageTraders] = useState(1);
   const itemsPerPage = 5;
+
+  // Live stop execution & POD modal state
+  const [selectedTripStops, setSelectedTripStops] = useState(null);
+  const [loadingStops, setLoadingStops] = useState(false);
+  const [stopsError, setStopsError] = useState("");
+
+  // Trader shipment live tracking modal state
+  const [selectedTraderTracking, setSelectedTraderTracking] = useState(null);
+  const [loadingTracking, setLoadingTracking] = useState(false);
+  const [trackingError, setTrackingError] = useState("");
+
+  const handleViewTripStops = async (tripId) => {
+    try {
+      setLoadingStops(true);
+      setStopsError("");
+      const res = await axios.get(`${BASE_URL}/admin/trip-stops/${tripId}`, { withCredentials: true });
+      setSelectedTripStops(res.data);
+    } catch (err) {
+      setStopsError(err.response?.data?.message || err.message || "Failed to load stops.");
+    } finally {
+      setLoadingStops(false);
+    }
+  };
+
+  const handleViewTraderTracking = async (traderRequestId) => {
+    try {
+      setLoadingTracking(true);
+      setTrackingError("");
+      const res = await axios.get(`${BASE_URL}/trader/shipment-status/${traderRequestId}`, { withCredentials: true });
+      setSelectedTraderTracking(res.data);
+    } catch (err) {
+      setTrackingError(err.response?.data?.message || err.message || "Failed to track cargo.");
+    } finally {
+      setLoadingTracking(false);
+    }
+  };
 
   const fetchMergedSchedule = async () => {
     try {
@@ -76,7 +128,12 @@ const MergedSchedule = () => {
             </div>
             <div className="space-y-6">
               {accepted.slice((currentPageAccepted - 1) * itemsPerPage, currentPageAccepted * itemsPerPage).map((truck, index) => (
-                <TruckCard key={truck._id || index} truck={truck} status="accepted" />
+                <TruckCard
+                  key={truck._id || index}
+                  truck={truck}
+                  status="accepted"
+                  onViewStops={handleViewTripStops}
+                />
               ))}
             </div>
             <Pagination
@@ -100,7 +157,12 @@ const MergedSchedule = () => {
             </div>
             <div className="space-y-6">
               {rejected.slice((currentPageRejected - 1) * itemsPerPage, currentPageRejected * itemsPerPage).map((truck, index) => (
-                <TruckCard key={truck._id || index} truck={truck} status="rejected" />
+                <TruckCard
+                  key={truck._id || index}
+                  truck={truck}
+                  status="rejected"
+                  onViewStops={handleViewTripStops}
+                />
               ))}
             </div>
             <Pagination
@@ -133,6 +195,7 @@ const MergedSchedule = () => {
                     key={trader._id || index}
                     trader={trader}
                     matchedSchedule={matchedSchedule}
+                    onTrackCargo={handleViewTraderTracking}
                   />
                 );
               })}
@@ -148,6 +211,211 @@ const MergedSchedule = () => {
           </section>
         )}
 
+        {/* ── Modal: Live Stop Execution & Proof of Delivery (Admin Dispatch) ── */}
+        {selectedTripStops && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-gray-900 border border-white/10 rounded-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl">
+              <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-white/3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                    <Truck className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Trip Stops & Live Execution</h3>
+                    <p className="text-xs text-white/40">Truck: {selectedTripStops.truckLicensePlate} • Status: {selectedTripStops.lifecycleStatus.toUpperCase()}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedTripStops(null)}
+                  className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto space-y-6">
+                {/* Stats row */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="p-3 rounded-xl bg-white/3 border border-white/5">
+                    <p className="text-xs text-white/40 mb-1">Current Onboard Load</p>
+                    <p className="text-base font-bold text-emerald-400">{selectedTripStops.currentLoadOnBoard?.toLocaleString()} kg</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/3 border border-white/5">
+                    <p className="text-xs text-white/40 mb-1">Delivered Freight</p>
+                    <p className="text-base font-bold text-blue-400">{selectedTripStops.totalDeliveredWeight?.toLocaleString()} kg</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/3 border border-white/5 col-span-2 sm:col-span-1">
+                    <p className="text-xs text-white/40 mb-1">Total Stops</p>
+                    <p className="text-base font-bold text-white">{selectedTripStops.stops?.length || 0}</p>
+                  </div>
+                </div>
+
+                {/* Stops timeline */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-semibold text-white/40 uppercase tracking-wider">Ordered Itinerary Stops</h4>
+                  {selectedTripStops.stops?.map((st, idx) => (
+                    <div key={idx} className="p-4 rounded-xl bg-white/3 border border-white/5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold flex items-center justify-center">
+                            {idx + 1}
+                          </span>
+                          <span className="font-semibold text-white text-sm">{st.stopName}</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-white/5 border border-white/10 text-white/60 uppercase">
+                            {st.stopType}
+                          </span>
+                        </div>
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${
+                          st.status === 'completed'
+                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                            : st.status === 'failed'
+                            ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                            : st.status === 'in_progress' || st.status === 'arrived'
+                            ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                            : 'bg-white/5 border-white/10 text-white/40'
+                        }`}>
+                          {st.status.toUpperCase()}
+                        </span>
+                      </div>
+
+                      {/* Shipments at this stop */}
+                      {st.shipments && st.shipments.length > 0 && (
+                        <div className="pl-8 space-y-1">
+                          {st.shipments.map((ship, sIdx) => (
+                            <div key={sIdx} className="text-xs text-white/60 flex items-center justify-between bg-black/20 px-3 py-1.5 rounded-lg border border-white/5">
+                              <span>{ship.operation === 'pickup' ? '▲ PICKUP' : '▼ DELIVER'}: {ship.reference} ({ship.cargoDescription})</span>
+                              <span className="font-medium text-white">{ship.weightKg} kg</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Proof of Delivery Details if available */}
+                      {st.proofOfDelivery && (
+                        <div className="pl-8 p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-xs space-y-1">
+                          <div className="flex items-center justify-between text-emerald-400 font-semibold">
+                            <span className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> Proof of Delivery Captured</span>
+                            <span className="text-[10px] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 uppercase">{st.proofOfDelivery.verificationStatus.replace('_', ' ')}</span>
+                          </div>
+                          {st.recipient?.name && (
+                            <p className="text-white/80">Recipient: <span className="font-medium text-white">{st.recipient.name}</span> {st.recipient.phone && `(${st.recipient.phone})`}</p>
+                          )}
+                          <p className="text-white/40 text-[11px]">Method: {st.proofOfDelivery.type?.toUpperCase()} {st.proofOfDelivery.otpCode ? `• OTP Code: ${st.proofOfDelivery.otpCode}` : ''}</p>
+                        </div>
+                      )}
+
+                      {/* Failure note */}
+                      {st.failureReason && (
+                        <div className="pl-8 p-3 rounded-lg bg-red-500/5 border border-red-500/20 text-xs text-red-400 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                          <span>Failure Reason: {st.failureReason}</span>
+                        </div>
+                      )}
+
+                      {/* Audit transition history */}
+                      {st.transitionHistory && st.transitionHistory.length > 0 && (
+                        <div className="pl-8 pt-1 text-[11px] text-white/40 space-y-0.5 border-t border-white/5">
+                          <p className="font-medium text-white/50 mb-0.5">Audit Trail:</p>
+                          {st.transitionHistory.map((th, thIdx) => (
+                            <p key={thIdx}>
+                              • {new Date(th.timestamp).toLocaleTimeString()}: {th.fromStatus} → <span className="text-white/70">{th.toStatus}</span> by {th.driverName} {th.reason ? `("${th.reason}")` : ''}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Modal: Trader Live Shipment Tracking ────────────────────────── */}
+        {selectedTraderTracking && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-gray-900 border border-blue-500/20 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl">
+              <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-blue-500/5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                    <Package className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Cargo Tracking</h3>
+                    <p className="text-xs text-white/40">{selectedTraderTracking.source} → {selectedTraderTracking.destination}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedTraderTracking(null)}
+                  className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-5">
+                {/* Status banner */}
+                <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold tracking-wider text-blue-400">Live Status</p>
+                    <p className="text-base font-bold text-white">{selectedTraderTracking.statusLabel}</p>
+                  </div>
+                  <span className="text-xs px-3 py-1 rounded-full font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                    {selectedTraderTracking.carrierTruckLicensePlate || "Pending Truck"}
+                  </span>
+                </div>
+
+                {/* Cargo Details */}
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 rounded-lg bg-white/3 border border-white/5">
+                    <p className="text-white/40 mb-0.5">Cargo Weight</p>
+                    <p className="text-sm font-semibold text-white">{selectedTraderTracking.weightKg} kg</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-white/3 border border-white/5">
+                    <p className="text-white/40 mb-0.5">Assigned Carrier</p>
+                    <p className="text-sm font-semibold text-white">{selectedTraderTracking.carrierTruckLicensePlate || "In Queue"}</p>
+                  </div>
+                </div>
+
+                {/* Route Milestones */}
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-white/40 uppercase tracking-wider">Transit Milestones</p>
+                  <div className="space-y-2">
+                    {selectedTraderTracking.milestones?.map((m, mIdx) => (
+                      <div key={mIdx} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-white/3 border border-white/5">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-3.5 h-3.5 text-blue-400" />
+                          <span className="text-white font-medium">{m.stopName}</span>
+                          <span className="text-[10px] text-white/40">({m.stopType})</span>
+                        </div>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                          m.status === 'completed'
+                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                            : m.status === 'failed'
+                            ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                            : 'bg-white/5 border-white/10 text-white/40'
+                        }`}>
+                          {m.status.toUpperCase()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* POD Notice */}
+                {selectedTraderTracking.proofOfDelivery && (
+                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs space-y-1">
+                    <p className="text-emerald-400 font-semibold flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4" /> Proof of Delivery Received
+                    </p>
+                    <p className="text-white/60">Verification: {selectedTraderTracking.proofOfDelivery.verificationStatus?.replace('_', ' ')}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
@@ -155,7 +423,7 @@ const MergedSchedule = () => {
 
 // ── Sub-component: TruckCard ─────────────────────────────────────────────────
 
-const TruckCard = ({ truck, status }) => {
+const TruckCard = ({ truck, status, onViewStops }) => {
   const isAccepted = status === 'accepted';
 
   return (
@@ -253,6 +521,16 @@ const TruckCard = ({ truck, status }) => {
             </div>
           </div>
         </div>
+
+        {/* Action Button: Live Stops & POD */}
+        {onViewStops && (
+          <button
+            onClick={() => onViewStops(truck._id)}
+            className="w-full mt-2 py-2.5 px-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 font-semibold text-xs flex items-center justify-center gap-2 transition-colors"
+          >
+            <Clock className="w-4 h-4" /> View Live Stop Execution & POD
+          </button>
+        )}
       </div>
     </div>
   );
@@ -260,7 +538,7 @@ const TruckCard = ({ truck, status }) => {
 
 // ── Sub-component: TraderCard ────────────────────────────────────────────────
 
-const TraderCard = ({ trader, matchedSchedule }) => {
+const TraderCard = ({ trader, matchedSchedule, onTrackCargo }) => {
   const traderLoad = Array.isArray(trader.load) ? trader.load : [];
   const traderStops = Array.isArray(trader.stops) ? trader.stops : [];
   const totalCapacity = matchedSchedule?.totalCapacity || 0;
@@ -406,6 +684,16 @@ const TraderCard = ({ trader, matchedSchedule }) => {
             </p>
           </div>
         </div>
+
+        {/* Action Button: Live Cargo Tracking */}
+        {onTrackCargo && (
+          <button
+            onClick={() => onTrackCargo(trader.traderRequestId)}
+            className="w-full mt-2 py-2.5 px-4 rounded-xl bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 text-blue-400 font-semibold text-xs flex items-center justify-center gap-2 transition-colors"
+          >
+            <Navigation className="w-4 h-4" /> Live Cargo Tracking & Milestones
+          </button>
+        )}
       </div>
     </div>
   );

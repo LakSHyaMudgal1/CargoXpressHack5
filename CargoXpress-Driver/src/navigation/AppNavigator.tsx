@@ -12,6 +12,7 @@ import { LoginScreen } from '../screens/auth/LoginScreen';
 import { DashboardScreen } from '../screens/dashboard/DashboardScreen';
 import { ActiveTripScreen } from '../screens/trip/ActiveTripScreen';
 import { TripDetailsScreen } from '../screens/trip/TripDetailsScreen';
+import { StopDetailsScreen } from '../screens/trip/StopDetailsScreen';
 import { MergeOffersScreen } from '../screens/merge/MergeOffersScreen';
 import { ProfileScreen } from '../screens/profile/ProfileScreen';
 
@@ -65,6 +66,7 @@ export const AppNavigator: React.FC = () => {
             <Stack.Screen name="Dashboard" component={DashboardScreen} />
             <Stack.Screen name="ActiveTrip" component={ActiveTripScreen} />
             <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
+            <Stack.Screen name="StopDetails" component={StopDetailsScreen} />
             <Stack.Screen name="MergeOffers" component={MergeOffersScreen} />
             <Stack.Screen name="Profile" component={ProfileScreen} />
           </>
