@@ -50,7 +50,7 @@ export const Input = React.forwardRef(({
           required={required}
           aria-invalid={Boolean(error)}
           aria-describedby={describedBy}
-          className={`w-full bg-surface-elevated/90 border rounded-md px-3 py-2 text-xs sm:text-sm text-ink placeholder:text-ink-subtle transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-signal-aqua/80 focus:ring-offset-1 focus:ring-offset-canvas focus:border-transparent ${
+          className={`w-full bg-surface-elevated/90 border rounded-md px-3 py-2 text-xs sm:text-sm text-ink placeholder:text-ink-subtle transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-signal-aqua/80 focus:ring-offset-1 focus:ring-offset-canvas focus:border-transparent disabled:bg-surface-subtle/80 disabled:text-ink-muted disabled:border-border/60 disabled:cursor-not-allowed disabled:opacity-85 ${
             LeftIcon ? 'pl-9' : ''
           } ${RightIcon ? 'pr-9' : ''} ${
             error

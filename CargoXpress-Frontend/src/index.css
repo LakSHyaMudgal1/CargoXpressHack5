@@ -3,27 +3,270 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --color-canvas: #07090E;
-    --color-surface-base: #0D111A;
-    --color-surface: #0E131F;
-    --color-surface-subtle: #121824;
-    --color-surface-elevated: #182030;
-    --color-border: rgba(255, 255, 255, 0.08);
-    --color-border-subtle: rgba(255, 255, 255, 0.05);
-    --color-border-muted: rgba(255, 255, 255, 0.12);
-    --color-border-strong: rgba(255, 255, 255, 0.20);
-    --color-ink: #F8FAFC;
-    --color-ink-stark: #FFFFFF;
-    --color-ink-secondary: #CBD5E1;
-    --color-ink-muted: #94A3B8;
-    --color-ink-subtle: #64748B;
-    --color-signal-aqua: #19E8C8;
-    --color-signal-coral: #FF4B3A;
-    --color-signal-emerald: #10B981;
-    --color-signal-amber: #F59E0B;
-    --color-signal-sky: #0EA5E9;
-    --color-signal-purple: #8B5CF6;
+  /* =========================================================================
+     THEME PRESET 1: MIDNIGHT (Flagship Obsidian Dark)
+     ========================================================================= */
+  :root,
+  [data-theme="midnight"] {
+    --theme-name: "Midnight";
+    --theme-mode: "dark";
+
+    /* Backgrounds & Surfaces */
+    --color-canvas-rgb: 7, 9, 14;
+    --color-nav-bg-rgb: 13, 17, 26;
+    --color-surface-base-rgb: 13, 17, 26;
+    --color-surface-rgb: 14, 19, 31;
+    --color-surface-subtle-rgb: 18, 24, 36;
+    --color-surface-elevated-rgb: 24, 32, 48;
+    --color-surface-hover-rgb: 30, 41, 61;
+    --color-surface-active-rgb: 36, 50, 77;
+
+    /* Hairline Dividers & Borders */
+    --color-border-rgb: 255, 255, 255;
+    --color-border-alpha: 0.08;
+    --color-border-subtle-alpha: 0.05;
+    --color-border-muted-alpha: 0.12;
+    --color-border-strong-alpha: 0.20;
+
+    /* High-contrast Ink Typography */
+    --color-ink-rgb: 248, 250, 252;
+    --color-ink-stark-rgb: 255, 255, 255;
+    --color-ink-secondary-rgb: 203, 213, 225;
+    --color-ink-muted-rgb: 148, 163, 184;
+    --color-ink-subtle-rgb: 100, 116, 139;
+
+    /* Action Tokens */
+    --color-primary-rgb: 16, 185, 129;
+    --color-primary-hover-rgb: 5, 150, 105;
+    --color-primary-text-rgb: 7, 9, 14;
+    --color-secondary-bg-rgb: 24, 32, 48;
+    --color-secondary-hover-rgb: 30, 41, 61;
+    --color-secondary-text-rgb: 248, 250, 252;
+
+    /* Semantic Freight & Telemetry Signals */
+    --color-signal-aqua-rgb: 25, 232, 200;
+    --color-signal-coral-rgb: 255, 75, 58;
+    --color-signal-emerald-rgb: 16, 185, 129;
+    --color-signal-amber-rgb: 245, 158, 11;
+    --color-signal-sky-rgb: 14, 165, 233;
+    --color-signal-purple-rgb: 139, 92, 246;
+
+    /* Shadow Elevation */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+    --shadow-subtle-card: 0 2px 8px -1px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    --shadow-elevated-card: 0 8px 24px -4px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  }
+
+  /* =========================================================================
+     THEME PRESET 2: OCEAN BLUE (Clean Crisp Light)
+     ========================================================================= */
+  [data-theme="ocean"] {
+    --theme-name: "Ocean Blue";
+    --theme-mode: "light";
+
+    /* Backgrounds & Surfaces */
+    --color-canvas-rgb: 241, 245, 249;
+    --color-nav-bg-rgb: 255, 255, 255;
+    --color-surface-base-rgb: 255, 255, 255;
+    --color-surface-rgb: 255, 255, 255;
+    --color-surface-subtle-rgb: 248, 250, 252;
+    --color-surface-elevated-rgb: 255, 255, 255;
+    --color-surface-hover-rgb: 226, 232, 240;
+    --color-surface-active-rgb: 203, 213, 225;
+
+    /* Hairline Dividers & Borders */
+    --color-border-rgb: 15, 23, 42;
+    --color-border-alpha: 0.10;
+    --color-border-subtle-alpha: 0.06;
+    --color-border-muted-alpha: 0.16;
+    --color-border-strong-alpha: 0.25;
+
+    /* High-contrast Ink Typography */
+    --color-ink-rgb: 15, 23, 42;
+    --color-ink-stark-rgb: 2, 6, 23;
+    --color-ink-secondary-rgb: 51, 65, 85;
+    --color-ink-muted-rgb: 100, 116, 139;
+    --color-ink-subtle-rgb: 148, 163, 184;
+
+    /* Action Tokens */
+    --color-primary-rgb: 2, 132, 199;
+    --color-primary-hover-rgb: 3, 105, 161;
+    --color-primary-text-rgb: 255, 255, 255;
+    --color-secondary-bg-rgb: 241, 245, 249;
+    --color-secondary-hover-rgb: 226, 232, 240;
+    --color-secondary-text-rgb: 15, 23, 42;
+
+    /* Semantic Freight & Telemetry Signals */
+    --color-signal-aqua-rgb: 2, 132, 199;
+    --color-signal-coral-rgb: 220, 38, 38;
+    --color-signal-emerald-rgb: 5, 150, 105;
+    --color-signal-amber-rgb: 217, 119, 6;
+    --color-signal-sky-rgb: 2, 132, 199;
+    --color-signal-purple-rgb: 124, 58, 237;
+
+    /* Shadow Elevation */
+    --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+    --shadow-subtle-card: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.08);
+    --shadow-elevated-card: 0 10px 25px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04), 0 0 0 1px rgba(15, 23, 42, 0.12);
+  }
+
+  /* =========================================================================
+     THEME PRESET 3: GRAPHITE (Restrained Slate & Charcoal)
+     ========================================================================= */
+  [data-theme="graphite"] {
+    --theme-name: "Graphite";
+    --theme-mode: "dark";
+
+    /* Backgrounds & Surfaces */
+    --color-canvas-rgb: 17, 20, 26;
+    --color-nav-bg-rgb: 23, 27, 35;
+    --color-surface-base-rgb: 23, 27, 35;
+    --color-surface-rgb: 28, 33, 43;
+    --color-surface-subtle-rgb: 35, 41, 54;
+    --color-surface-elevated-rgb: 43, 50, 66;
+    --color-surface-hover-rgb: 52, 60, 79;
+    --color-surface-active-rgb: 62, 72, 94;
+
+    /* Hairline Dividers & Borders */
+    --color-border-rgb: 241, 245, 249;
+    --color-border-alpha: 0.09;
+    --color-border-subtle-alpha: 0.05;
+    --color-border-muted-alpha: 0.14;
+    --color-border-strong-alpha: 0.22;
+
+    /* High-contrast Ink Typography */
+    --color-ink-rgb: 248, 250, 252;
+    --color-ink-stark-rgb: 255, 255, 255;
+    --color-ink-secondary-rgb: 203, 213, 225;
+    --color-ink-muted-rgb: 148, 163, 184;
+    --color-ink-subtle-rgb: 100, 116, 139;
+
+    /* Action Tokens */
+    --color-primary-rgb: 56, 189, 248;
+    --color-primary-hover-rgb: 2, 132, 199;
+    --color-primary-text-rgb: 11, 19, 43;
+    --color-secondary-bg-rgb: 43, 50, 66;
+    --color-secondary-hover-rgb: 52, 60, 79;
+    --color-secondary-text-rgb: 248, 250, 252;
+
+    /* Semantic Freight & Telemetry Signals */
+    --color-signal-aqua-rgb: 56, 189, 248;
+    --color-signal-coral-rgb: 248, 113, 113;
+    --color-signal-emerald-rgb: 52, 211, 153;
+    --color-signal-amber-rgb: 251, 191, 36;
+    --color-signal-sky-rgb: 56, 189, 248;
+    --color-signal-purple-rgb: 167, 139, 250;
+
+    /* Shadow Elevation */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.45);
+    --shadow-subtle-card: 0 2px 8px -1px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(241, 245, 249, 0.09);
+    --shadow-elevated-card: 0 8px 24px -4px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(241, 245, 249, 0.15);
+  }
+
+  /* =========================================================================
+     THEME PRESET 4: FOREST (Deep Pine & Sage Green)
+     ========================================================================= */
+  [data-theme="forest"] {
+    --theme-name: "Forest";
+    --theme-mode: "dark";
+
+    /* Backgrounds & Surfaces */
+    --color-canvas-rgb: 11, 18, 14;
+    --color-nav-bg-rgb: 17, 26, 21;
+    --color-surface-base-rgb: 17, 26, 21;
+    --color-surface-rgb: 22, 34, 28;
+    --color-surface-subtle-rgb: 29, 45, 37;
+    --color-surface-elevated-rgb: 37, 57, 47;
+    --color-surface-hover-rgb: 46, 70, 58;
+    --color-surface-active-rgb: 56, 85, 70;
+
+    /* Hairline Dividers & Borders */
+    --color-border-rgb: 209, 224, 215;
+    --color-border-alpha: 0.10;
+    --color-border-subtle-alpha: 0.06;
+    --color-border-muted-alpha: 0.16;
+    --color-border-strong-alpha: 0.25;
+
+    /* High-contrast Ink Typography */
+    --color-ink-rgb: 242, 247, 244;
+    --color-ink-stark-rgb: 255, 255, 255;
+    --color-ink-secondary-rgb: 209, 224, 215;
+    --color-ink-muted-rgb: 143, 166, 153;
+    --color-ink-subtle-rgb: 97, 117, 106;
+
+    /* Action Tokens */
+    --color-primary-rgb: 16, 185, 129;
+    --color-primary-hover-rgb: 5, 150, 105;
+    --color-primary-text-rgb: 6, 35, 25;
+    --color-secondary-bg-rgb: 37, 57, 47;
+    --color-secondary-hover-rgb: 46, 70, 58;
+    --color-secondary-text-rgb: 242, 247, 244;
+
+    /* Semantic Freight & Telemetry Signals */
+    --color-signal-aqua-rgb: 45, 212, 191;
+    --color-signal-coral-rgb: 251, 113, 133;
+    --color-signal-emerald-rgb: 16, 185, 129;
+    --color-signal-amber-rgb: 245, 158, 11;
+    --color-signal-sky-rgb: 56, 189, 248;
+    --color-signal-purple-rgb: 192, 132, 252;
+
+    /* Shadow Elevation */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.45);
+    --shadow-subtle-card: 0 2px 8px -1px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(209, 224, 215, 0.10);
+    --shadow-elevated-card: 0 8px 24px -4px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(209, 224, 215, 0.16);
+  }
+
+  /* =========================================================================
+     THEME PRESET 5: WARM SAND (Alabaster Ivory & Earthy Terracotta)
+     ========================================================================= */
+  [data-theme="sand"] {
+    --theme-name: "Warm Sand";
+    --theme-mode: "light";
+
+    /* Backgrounds & Surfaces */
+    --color-canvas-rgb: 247, 245, 238;
+    --color-nav-bg-rgb: 255, 255, 255;
+    --color-surface-base-rgb: 255, 255, 255;
+    --color-surface-rgb: 255, 255, 255;
+    --color-surface-subtle-rgb: 239, 236, 226;
+    --color-surface-elevated-rgb: 255, 255, 255;
+    --color-surface-hover-rgb: 230, 226, 212;
+    --color-surface-active-rgb: 220, 214, 196;
+
+    /* Hairline Dividers & Borders */
+    --color-border-rgb: 28, 25, 23;
+    --color-border-alpha: 0.10;
+    --color-border-subtle-alpha: 0.06;
+    --color-border-muted-alpha: 0.16;
+    --color-border-strong-alpha: 0.25;
+
+    /* High-contrast Ink Typography */
+    --color-ink-rgb: 28, 25, 23;
+    --color-ink-stark-rgb: 12, 10, 9;
+    --color-ink-secondary-rgb: 68, 64, 60;
+    --color-ink-muted-rgb: 120, 113, 108;
+    --color-ink-subtle-rgb: 168, 162, 158;
+
+    /* Action Tokens */
+    --color-primary-rgb: 194, 65, 12;
+    --color-primary-hover-rgb: 154, 52, 18;
+    --color-primary-text-rgb: 255, 255, 255;
+    --color-secondary-bg-rgb: 239, 236, 226;
+    --color-secondary-hover-rgb: 230, 226, 212;
+    --color-secondary-text-rgb: 28, 25, 23;
+
+    /* Semantic Freight & Telemetry Signals */
+    --color-signal-aqua-rgb: 2, 132, 199;
+    --color-signal-coral-rgb: 220, 38, 38;
+    --color-signal-emerald-rgb: 21, 128, 61;
+    --color-signal-amber-rgb: 217, 119, 6;
+    --color-signal-sky-rgb: 2, 132, 199;
+    --color-signal-purple-rgb: 124, 58, 237;
+
+    /* Shadow Elevation */
+    --shadow-sm: 0 1px 2px 0 rgba(28, 25, 23, 0.05);
+    --shadow-subtle-card: 0 1px 3px 0 rgba(28, 25, 23, 0.07), 0 0 0 1px rgba(28, 25, 23, 0.08);
+    --shadow-elevated-card: 0 10px 25px -3px rgba(28, 25, 23, 0.09), 0 4px 6px -4px rgba(28, 25, 23, 0.04), 0 0 0 1px rgba(28, 25, 23, 0.12);
   }
 
   body {
@@ -31,6 +274,7 @@
     min-height: 100vh;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
     overflow-x: hidden;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   /* Consistent Keyboard focus accessibility standard across all interactive elements */
@@ -44,14 +288,14 @@
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: #07090E;
+    background: rgba(var(--color-canvas-rgb), 1);
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(var(--color-ink-rgb), 0.18);
     border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.25);
+    background: rgba(var(--color-ink-rgb), 0.30);
   }
 
   /* Accessibility: Respect prefers-reduced-motion */
@@ -115,26 +359,26 @@
 
   /* Hairline borders */
   .cx-hairline {
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(var(--color-border-rgb), var(--color-border-alpha, 0.12));
   }
   .cx-hairline-b {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(var(--color-border-rgb), var(--color-border-alpha, 0.12));
   }
   .cx-hairline-t {
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid rgba(var(--color-border-rgb), var(--color-border-alpha, 0.12));
   }
 
   /* Restrained CE-style card with hairline border */
   .cx-card {
-    @apply bg-surface/90 border border-white/10 rounded-lg transition-all duration-200 ease-out;
+    @apply bg-surface/90 border border-border rounded-lg transition-all duration-200 ease-out;
   }
   .cx-card:hover {
-    @apply border-white/20 -translate-y-[1px] shadow-sm;
+    @apply border-border-strong -translate-y-[1px] shadow-sm;
   }
 
   /* Interactive clickable row */
   .cx-row-interactive {
-    @apply transition-colors duration-150 cursor-pointer hover:bg-white/[0.04] active:bg-white/[0.06];
+    @apply transition-colors duration-150 cursor-pointer hover:bg-surface-hover active:bg-surface-active;
   }
 
   /* Freight corridor linear progression indicator */

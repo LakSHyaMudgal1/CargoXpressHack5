@@ -50,14 +50,14 @@ const HeroSection = () => {
               {!user && (
                 <>
                   <Link to="/login">
-                    <button className="group flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-400/30 hover:-translate-y-0.5">
+                    <button className="group flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold rounded-xl transition-all duration-200 shadow-md hover:-translate-y-0.5">
                       Get Started Free
                       <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
                     </button>
                   </Link>
                   <button
                     onClick={() => document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' })}
-                    className="px-6 py-3 text-white/70 hover:text-white font-semibold rounded-xl border border-white/10 hover:border-white/20 hover:bg-white/5 transition-all"
+                    className="px-6 py-3 text-ink-secondary hover:text-ink font-semibold rounded-xl border border-border hover:border-border-strong hover:bg-surface-hover transition-all"
                   >
                     How it Works
                   </button>
@@ -66,13 +66,13 @@ const HeroSection = () => {
               {isCompany && (
                 <>
                   <Link to="/truck">
-                    <button className="group flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl transition-all shadow-lg shadow-emerald-500/25 hover:-translate-y-0.5">
+                    <button className="group flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold rounded-xl transition-all shadow-md hover:-translate-y-0.5">
                       <Truck className="h-4 w-4" /> Add Truck
                       <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
                     </button>
                   </Link>
                   <Link to="/route">
-                    <button className="px-6 py-3 text-white/70 hover:text-white font-semibold rounded-xl border border-white/10 hover:border-white/20 hover:bg-white/5 transition-all">
+                    <button className="px-6 py-3 text-ink-secondary hover:text-ink font-semibold rounded-xl border border-border hover:border-border-strong hover:bg-surface-hover transition-all">
                       Add Route
                     </button>
                   </Link>
@@ -80,14 +80,14 @@ const HeroSection = () => {
               )}
               {isTrader && (
                 <Link to="/traderRequest">
-                  <button className="group flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl transition-all shadow-lg shadow-emerald-500/25 hover:-translate-y-0.5">
+                  <button className="group flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold rounded-xl transition-all shadow-md hover:-translate-y-0.5">
                     Request Delivery <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
                   </button>
                 </Link>
               )}
               {isAdmin && (
                 <Link to="/admin">
-                  <button className="group flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl transition-all shadow-lg shadow-emerald-500/25 hover:-translate-y-0.5">
+                  <button className="group flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold rounded-xl transition-all shadow-md hover:-translate-y-0.5">
                     Open Dashboard <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
                   </button>
                 </Link>

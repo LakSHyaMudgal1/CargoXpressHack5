@@ -7,8 +7,32 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="/assets/index-qjquc_UH.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-D39iHcej.css">
+    <!-- Immediate theme initialization to eliminate theme flashing during load/refresh -->
+    <script>
+      (function() {
+        try {
+          var validThemes = ['midnight', 'ocean', 'graphite', 'forest', 'sand'];
+          var darkThemes = ['midnight', 'graphite', 'forest'];
+          var raw = localStorage.getItem('cargoxpress_theme');
+          var theme = (validThemes.indexOf(raw) !== -1) ? raw : 'midnight';
+          var isDark = darkThemes.indexOf(theme) !== -1;
+          var root = document.documentElement;
+          root.setAttribute('data-theme', theme);
+          root.setAttribute('data-theme-mode', isDark ? 'dark' : 'light');
+          if (isDark) {
+            root.classList.add('dark');
+          } else {
+            root.classList.remove('dark');
+          }
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'midnight');
+          document.documentElement.setAttribute('data-theme-mode', 'dark');
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-DcUEwasY.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-uWlRmvcg.css">
   </head>
   <body>
     <div id="root"></div>

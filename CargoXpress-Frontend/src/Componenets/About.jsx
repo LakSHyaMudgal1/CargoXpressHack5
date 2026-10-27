@@ -59,7 +59,7 @@ const About = () => {
 
             {!user && (
               <Link to="/login">
-                <button className="group inline-flex items-center gap-2 px-6 py-3 bg-signal-emerald hover:bg-emerald-400 text-canvas font-semibold rounded-lg transition-all shadow-subtle-card">
+                <button className="group inline-flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold rounded-lg transition-all shadow-subtle-card">
                   Get Started Free
                   <span className="group-hover:translate-x-0.5 transition-transform inline-block">→</span>
                 </button>
@@ -67,21 +67,21 @@ const About = () => {
             )}
             {isTrader && (
               <Link to="/traderRequest">
-                <button className="group inline-flex items-center gap-2 px-6 py-3 bg-signal-emerald hover:bg-emerald-400 text-canvas font-semibold rounded-lg transition-all shadow-subtle-card">
+                <button className="group inline-flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold rounded-lg transition-all shadow-subtle-card">
                   Request Delivery <span className="group-hover:translate-x-0.5 transition-transform">→</span>
                 </button>
               </Link>
             )}
             {isCompany && (
               <Link to="/truck">
-                <button className="group inline-flex items-center gap-2 px-6 py-3 bg-signal-aqua hover:bg-cyan-400 text-canvas font-semibold rounded-lg transition-all shadow-subtle-card">
+                <button className="group inline-flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold rounded-lg transition-all shadow-subtle-card">
                   Manage Fleet <span className="group-hover:translate-x-0.5 transition-transform">→</span>
                 </button>
               </Link>
             )}
             {isAdmin && (
               <Link to="/admin">
-                <button className="group inline-flex items-center gap-2 px-6 py-3 bg-signal-aqua hover:bg-cyan-400 text-canvas font-semibold rounded-lg transition-all shadow-subtle-card">
+                <button className="group inline-flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold rounded-lg transition-all shadow-subtle-card">
                   Dispatch Command <span className="group-hover:translate-x-0.5 transition-transform">→</span>
                 </button>
               </Link>

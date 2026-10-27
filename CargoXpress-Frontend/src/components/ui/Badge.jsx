@@ -9,27 +9,28 @@ export const Badge = ({
   variant = 'neutral',
   size = 'md',
   dot = false,
+  icon: Icon,
   pill = false,
   className = '',
   ...props
 }) => {
   const variants = {
-    emerald: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
-    success: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
-    aqua: 'bg-signal-aqua/10 text-signal-aqua border-signal-aqua/30',
-    coral: 'bg-signal-coral/10 text-signal-coral border-signal-coral/30',
-    destructive: 'bg-signal-coral/10 text-signal-coral border-signal-coral/30',
-    amber: 'bg-signal-amber/10 text-signal-amber border-signal-amber/30',
-    warning: 'bg-signal-amber/10 text-signal-amber border-signal-amber/30',
-    sky: 'bg-signal-sky/10 text-signal-sky border-signal-sky/30',
-    info: 'bg-signal-sky/10 text-signal-sky border-signal-sky/30',
-    purple: 'bg-purple-500/10 text-purple-300 border-purple-500/30',
-    neutral: 'bg-white/5 text-ink-secondary border-border',
+    emerald: 'bg-signal-emerald/15 text-signal-emerald border-signal-emerald/30',
+    success: 'bg-signal-emerald/15 text-signal-emerald border-signal-emerald/30',
+    aqua: 'bg-signal-aqua/15 text-signal-aqua border-signal-aqua/30',
+    coral: 'bg-signal-coral/15 text-signal-coral border-signal-coral/30',
+    destructive: 'bg-signal-coral/15 text-signal-coral border-signal-coral/30',
+    amber: 'bg-signal-amber/15 text-signal-amber border-signal-amber/30',
+    warning: 'bg-signal-amber/15 text-signal-amber border-signal-amber/30',
+    sky: 'bg-signal-sky/15 text-signal-sky border-signal-sky/30',
+    info: 'bg-signal-sky/15 text-signal-sky border-signal-sky/30',
+    purple: 'bg-signal-purple/15 text-signal-purple border-signal-purple/30',
+    neutral: 'bg-surface-elevated text-ink-secondary border-border',
   };
 
   const dotColors = {
-    emerald: 'bg-emerald-400',
-    success: 'bg-emerald-400',
+    emerald: 'bg-signal-emerald',
+    success: 'bg-signal-emerald',
     aqua: 'bg-signal-aqua',
     coral: 'bg-signal-coral',
     destructive: 'bg-signal-coral',
@@ -37,7 +38,7 @@ export const Badge = ({
     warning: 'bg-signal-amber',
     sky: 'bg-signal-sky',
     info: 'bg-signal-sky',
-    purple: 'bg-purple-400',
+    purple: 'bg-signal-purple',
     neutral: 'bg-ink-subtle',
   };
 
@@ -55,11 +56,12 @@ export const Badge = ({
       {...props}
     >
       {dot && (
-        <span className="relative flex h-1.5 w-1.5 shrink-0">
+        <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden="true">
           <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${dotColors[variant] || dotColors.neutral}`} />
           <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${dotColors[variant] || dotColors.neutral}`} />
         </span>
       )}
+      {Icon && <Icon className="w-3 h-3 shrink-0" aria-hidden="true" />}
       <span>{children}</span>
     </span>
   );

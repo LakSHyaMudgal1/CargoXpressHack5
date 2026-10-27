@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { CheckCircle2, AlertCircle, Info, AlertTriangle, X } from 'lucide-react';
+import { ToastContext, useToast } from './ToastContext';
 
-const ToastContext = createContext(null);
+// eslint-disable-next-line react-refresh/only-export-components
+export { useToast };
 
 export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
@@ -37,7 +39,7 @@ export const ToastProvider = ({ children }) => {
   };
 
   const icons = {
-    success: <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />,
+    success: <CheckCircle2 className="w-4 h-4 text-signal-emerald shrink-0" />,
     error: <AlertCircle className="w-4 h-4 text-signal-coral shrink-0" />,
     info: <Info className="w-4 h-4 text-signal-aqua shrink-0" />,
     warning: <AlertTriangle className="w-4 h-4 text-signal-amber shrink-0" />,
@@ -45,7 +47,7 @@ export const ToastProvider = ({ children }) => {
   };
 
   const borders = {
-    success: 'border-emerald-500/30',
+    success: 'border-signal-emerald/30',
     error: 'border-signal-coral/30',
     info: 'border-signal-aqua/30',
     warning: 'border-signal-amber/30',
@@ -79,7 +81,7 @@ export const ToastProvider = ({ children }) => {
             </div>
             <button
               onClick={() => removeToast(t.id)}
-              className="p-1 rounded text-ink-subtle hover:text-ink hover:bg-white/10 transition-colors shrink-0"
+              className="p-1 rounded text-ink-subtle hover:text-ink hover:bg-surface-hover transition-colors shrink-0"
               aria-label="Dismiss toast"
             >
               <X className="w-3.5 h-3.5" />
@@ -89,22 +91,6 @@ export const ToastProvider = ({ children }) => {
       </div>
     </ToastContext.Provider>
   );
-};
-
-export const useToast = () => {
-  const context = useContext(ToastContext);
-  if (!context) {
-    // Graceful fallback if used outside provider
-    return {
-      showToast: (type, title, msg) => console.log(`[Toast ${type}]`, title, msg),
-      success: (msg, title) => console.log('[Toast Success]', title, msg),
-      error: (msg, title) => console.error('[Toast Error]', title, msg),
-      info: (msg, title) => console.info('[Toast Info]', title, msg),
-      warning: (msg, title) => console.warn('[Toast Warning]', title, msg),
-      dismiss: () => {},
-    };
-  }
-  return context;
 };
 
 export default ToastProvider;

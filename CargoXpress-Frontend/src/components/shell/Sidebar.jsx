@@ -72,7 +72,7 @@ export const Sidebar = ({
           <button
             type="button"
             onClick={onCloseMobile}
-            className="p-1.5 rounded-lg text-ink-subtle hover:text-ink hover:bg-white/5 lg:hidden"
+            className="p-1.5 rounded-lg text-ink-subtle hover:text-ink hover:bg-surface-hover lg:hidden"
             aria-label="Close menu"
           >
             <X className="w-5 h-5" />
@@ -113,7 +113,7 @@ export const Sidebar = ({
                     `group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-all duration-150 select-none ${
                       isActive
                         ? 'bg-signal-aqua/10 text-signal-aqua border border-signal-aqua/20 shadow-sm'
-                        : 'text-ink-secondary hover:text-ink hover:bg-white/5 border border-transparent'
+                        : 'text-ink-secondary hover:text-ink hover:bg-surface-hover border border-transparent'
                     } ${isCollapsed ? 'justify-center px-0' : ''}`
                   }
                 >
@@ -159,7 +159,7 @@ export const Sidebar = ({
           {!isCollapsed && (
             <Link
               to="/"
-              className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-ink-subtle hover:text-ink hover:bg-white/5 transition-colors"
+              className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-ink-subtle hover:text-ink hover:bg-surface-hover transition-colors"
             >
               <span className="flex items-center gap-2">
                 Public Overview
@@ -173,7 +173,7 @@ export const Sidebar = ({
             <button
               type="button"
               onClick={onToggleCollapse}
-              className={`p-2 rounded-lg text-ink-subtle hover:text-ink hover:bg-white/5 transition-colors flex items-center gap-2 text-xs w-full ${
+              className={`p-2 rounded-lg text-ink-subtle hover:text-ink hover:bg-surface-hover transition-colors flex items-center gap-2 text-xs w-full ${
                 isCollapsed ? 'justify-center' : ''
               }`}
               title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}

@@ -20,20 +20,20 @@ export const Button = React.forwardRef(({
   const baseStyles = 'relative inline-flex items-center justify-center font-medium transition-all duration-150 select-none disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-aqua/80 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas active:scale-[0.98]';
 
   const variants = {
-    // Primary: High-contrast Stark / Emerald operational action
-    primary: 'bg-signal-emerald text-canvas hover:bg-emerald-400 font-semibold shadow-sm',
+    // Primary: Semantic theme action token with guaranteed AAA contrast
+    primary: 'bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold shadow-sm',
     // Aqua: Telemetry / Live optimization action
-    aqua: 'bg-signal-aqua text-canvas hover:bg-teal-300 font-semibold shadow-sm',
-    // Secondary: Dark elevated surface with hairline border
+    aqua: 'bg-signal-aqua text-action-primary-text hover:bg-signal-aqua/80 font-semibold shadow-sm',
+    // Secondary: Elevated surface with hairline border
     secondary: 'bg-surface-elevated text-ink hover:bg-surface-hover border border-border hover:border-border-strong shadow-sm',
     // Outline: Transparent with hairline border
-    outline: 'bg-transparent text-ink hover:bg-white/5 border border-border hover:border-border-strong',
+    outline: 'bg-transparent text-ink hover:bg-surface-elevated border border-border hover:border-border-strong',
     // Ghost: Zero border, clean text button
-    ghost: 'bg-transparent text-ink-secondary hover:text-ink hover:bg-white/5',
+    ghost: 'bg-transparent text-ink-secondary hover:text-ink hover:bg-surface-hover',
     // Destructive: Hairline Coral signal
     destructive: 'bg-signal-coral/10 text-signal-coral border border-signal-coral/30 hover:bg-signal-coral hover:text-white',
     // Destructive Solid: High-urgency confirmation
-    destructiveSolid: 'bg-signal-coral text-white hover:bg-red-600 shadow-sm font-semibold',
+    destructiveSolid: 'bg-signal-coral text-white hover:bg-signal-coral/90 shadow-sm font-semibold',
     // Link button
     link: 'bg-transparent text-signal-aqua hover:underline underline-offset-4 p-0 h-auto font-normal',
   };

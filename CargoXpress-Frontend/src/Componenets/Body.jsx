@@ -48,7 +48,7 @@ const Body = () => {
         style={{
           zIndex: 0,
           background:
-            'radial-gradient(ellipse 80% 50% at 50% -5%, rgba(16,185,129,0.08) 0%, transparent 70%)',
+            'radial-gradient(ellipse 80% 50% at 50% -5%, rgba(var(--color-primary-rgb), 0.08) 0%, transparent 70%)',
         }}
       />
 

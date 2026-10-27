@@ -17,7 +17,7 @@ export const EmptyState = ({
 }) => {
   return (
     <div className={`flex flex-col items-center justify-center text-center p-6 sm:p-10 border border-dashed border-border rounded-lg bg-surface-subtle/30 ${className}`}>
-      <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-ink-muted mb-3 shadow-sm">
+      <div className="w-10 h-10 rounded-lg bg-surface-elevated border border-border flex items-center justify-center text-ink-muted mb-3 shadow-sm">
         <Icon className="w-5 h-5 stroke-[1.5]" />
       </div>
 

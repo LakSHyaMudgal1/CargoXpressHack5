@@ -4,7 +4,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import { BASE_URL } from '../utils/constants';
 import { removeUser } from '../utils/userSlice';
 import axios from 'axios';
-import { Truck, LayoutDashboard, PackagePlus, Route, Menu, X, LogOut, User, GitMerge, CalendarClock } from 'lucide-react';
+import { Truck, LayoutDashboard, PackagePlus, Route, Menu, X, LogOut, User, GitMerge, CalendarClock, Palette } from 'lucide-react';
+import { ThemeSelector } from '../components/ui/ThemeSelector';
 
 const Navbar = () => {
   const user = useSelector((store) => store.user);
@@ -44,21 +45,22 @@ const Navbar = () => {
 
         {/* Brand */}
         <Link to="/" className="text-xl font-bold tracking-tight">
-          <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">Cargo</span>
-          <span className="text-white">Xpress</span>
+          <span className="text-signal-aqua">Cargo</span>
+          <span className="text-ink">Xpress</span>
         </Link>
 
         {/* Desktop guest links */}
         {!user && (
           <div className="hidden md:flex items-center gap-8">
-            <div className="flex items-center gap-6 text-sm text-white/60">
+            <div className="flex items-center gap-6 text-sm text-ink-secondary">
               {[['about','About'],['feature','Features'],['contact','Contact']].map(([id,label]) => (
                 <button key={id} onClick={() => scroll(id)}
-                  className="hover:text-white transition-colors">{label}</button>
+                  className="hover:text-ink transition-colors">{label}</button>
               ))}
             </div>
+            <ThemeSelector />
             <Link to="/login">
-              <button className="px-4 py-2 text-sm font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white transition-colors">
+              <button className="px-4 py-2 text-sm font-semibold rounded-lg bg-action-primary text-action-primary-text hover:bg-action-primary-hover transition-colors">
                 Get Started
               </button>
             </Link>
@@ -70,7 +72,7 @@ const Navbar = () => {
           <div className="hidden md:flex items-center gap-1">
             {isAdmin && (
               <Link to="/admin">
-                <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-all">
+                <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-ink-secondary hover:text-ink hover:bg-surface-hover rounded-lg transition-all">
                   <LayoutDashboard className="h-4 w-4" /> Dashboard
                 </button>
               </Link>
@@ -78,17 +80,17 @@ const Navbar = () => {
             {isCompany && (
               <>
                 <Link to="/company">
-                  <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-all">
+                  <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-ink-secondary hover:text-ink hover:bg-surface-hover rounded-lg transition-all">
                     <LayoutDashboard className="h-4 w-4" /> Dashboard
                   </button>
                 </Link>
                 <Link to="/truck">
-                  <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-all">
+                  <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-ink-secondary hover:text-ink hover:bg-surface-hover rounded-lg transition-all">
                     <Truck className="h-4 w-4" /> Add Truck
                   </button>
                 </Link>
                 <Link to="/route">
-                  <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-all">
+                  <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-ink-secondary hover:text-ink hover:bg-surface-hover rounded-lg transition-all">
                     <Route className="h-4 w-4" /> Add Route
                   </button>
                 </Link>
@@ -97,47 +99,51 @@ const Navbar = () => {
             {isTrader && (
               <>
                 <Link to="/trader">
-                  <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-all">
+                  <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-ink-secondary hover:text-ink hover:bg-surface-hover rounded-lg transition-all">
                     <LayoutDashboard className="h-4 w-4" /> Dashboard
                   </button>
                 </Link>
                 <Link to="/traderRequest">
-                  <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-all">
+                  <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-ink-secondary hover:text-ink hover:bg-surface-hover rounded-lg transition-all">
                     <PackagePlus className="h-4 w-4" /> Request Delivery
                   </button>
                 </Link>
               </>
             )}
 
+            {/* Theme Presets Switcher */}
+            <ThemeSelector />
+
             {/* Avatar */}
             <div className="dropdown dropdown-end ml-2">
-              <div tabIndex={0} role="button" className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-white/5 cursor-pointer transition-all">
-                <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-emerald-500/40">
+              <div tabIndex={0} role="button" className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-surface-hover cursor-pointer transition-all">
+                <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-signal-aqua/40">
                   <img src={user.photoUrl} alt="avatar" className="w-full h-full object-cover" />
                 </div>
-                <span className="text-sm text-white/80 hidden lg:block max-w-[100px] truncate">{user.name}</span>
+                <span className="text-sm text-ink hidden lg:block max-w-[100px] truncate">{user.name}</span>
               </div>
               <ul tabIndex={0} className="dropdown-content menu bg-surface border border-border rounded-xl shadow-2xl shadow-black/60 w-52 p-2 mt-2">
                 <li className="px-3 py-2 text-xs text-ink-subtle font-medium truncate">{user.emailId}</li>
                 <div className="border-t border-border/60 my-1" />
-                <li><Link to="/profile" className="text-ink-secondary hover:text-ink hover:bg-white/5 rounded-lg flex gap-2"><User className="h-4 w-4"/>Profile</Link></li>
+                <li><Link to="/profile" className="text-ink-secondary hover:text-ink hover:bg-surface-hover rounded-lg flex gap-2"><User className="h-4 w-4"/>Profile</Link></li>
+                <li><Link to="/profile#appearance" className="text-ink-secondary hover:text-ink hover:bg-surface-hover rounded-lg flex gap-2"><Palette className="h-4 w-4"/>Theme Settings</Link></li>
                 {isCompany && (
                   <>
-                    <li><Link to="/truck" className="text-ink-secondary hover:text-ink hover:bg-white/5 rounded-lg flex gap-2"><Truck className="h-4 w-4"/>Fleet & Trucks</Link></li>
-                    <li><Link to="/route" className="text-ink-secondary hover:text-ink hover:bg-white/5 rounded-lg flex gap-2"><Route className="h-4 w-4"/>Add Route</Link></li>
+                    <li><Link to="/truck" className="text-ink-secondary hover:text-ink hover:bg-surface-hover rounded-lg flex gap-2"><Truck className="h-4 w-4"/>Fleet & Trucks</Link></li>
+                    <li><Link to="/route" className="text-ink-secondary hover:text-ink hover:bg-surface-hover rounded-lg flex gap-2"><Route className="h-4 w-4"/>Add Route</Link></li>
                   </>
                 )}
                 {isTrader  && (
                   <>
-                    <li><Link to="/trader" className="text-ink-secondary hover:text-ink hover:bg-white/5 rounded-lg flex gap-2"><LayoutDashboard className="h-4 w-4"/>Consignments</Link></li>
-                    <li><Link to="/traderRequest" className="text-ink-secondary hover:text-ink hover:bg-white/5 rounded-lg flex gap-2"><PackagePlus className="h-4 w-4"/>Request Delivery</Link></li>
+                    <li><Link to="/trader" className="text-ink-secondary hover:text-ink hover:bg-surface-hover rounded-lg flex gap-2"><LayoutDashboard className="h-4 w-4"/>Consignments</Link></li>
+                    <li><Link to="/traderRequest" className="text-ink-secondary hover:text-ink hover:bg-surface-hover rounded-lg flex gap-2"><PackagePlus className="h-4 w-4"/>Request Delivery</Link></li>
                   </>
                 )}
                 {isAdmin   && (
                   <>
-                    <li><Link to="/admin" className="text-ink-secondary hover:text-ink hover:bg-white/5 rounded-lg flex gap-2"><LayoutDashboard className="h-4 w-4"/>Admin Dashboard</Link></li>
-                    <li><Link to="/mergeable" className="text-ink-secondary hover:text-ink hover:bg-white/5 rounded-lg flex gap-2"><GitMerge className="h-4 w-4"/>Route Optimization</Link></li>
-                    <li><Link to="/mergedSchedule" className="text-ink-secondary hover:text-ink hover:bg-white/5 rounded-lg flex gap-2"><CalendarClock className="h-4 w-4"/>Consolidated Manifests</Link></li>
+                    <li><Link to="/admin" className="text-ink-secondary hover:text-ink hover:bg-surface-hover rounded-lg flex gap-2"><LayoutDashboard className="h-4 w-4"/>Admin Dashboard</Link></li>
+                    <li><Link to="/mergeable" className="text-ink-secondary hover:text-ink hover:bg-surface-hover rounded-lg flex gap-2"><GitMerge className="h-4 w-4"/>Route Optimization</Link></li>
+                    <li><Link to="/mergedSchedule" className="text-ink-secondary hover:text-ink hover:bg-surface-hover rounded-lg flex gap-2"><CalendarClock className="h-4 w-4"/>Consolidated Manifests</Link></li>
                   </>
                 )}
                 <div className="border-t border-border/60 my-1" />
@@ -156,28 +162,32 @@ const Navbar = () => {
       {/* Mobile menu */}
       {mobileOpen && (
         <div className="md:hidden bg-surface border-t border-border px-6 py-4 space-y-2">
+          <div className="flex items-center justify-between pb-3 border-b border-border mb-2">
+            <span className="text-xs text-ink-muted">Theme Preset:</span>
+            <ThemeSelector align="right" />
+          </div>
           {!user && (
             <>
               {[['about','About'],['feature','Features'],['contact','Contact']].map(([id,label]) => (
-                <button key={id} onClick={() => scroll(id)} className="block w-full text-left py-2 text-white/60 hover:text-white text-sm">{label}</button>
+                <button key={id} onClick={() => scroll(id)} className="block w-full text-left py-2 text-ink-secondary hover:text-ink text-sm">{label}</button>
               ))}
               <Link to="/login" onClick={() => setMobileOpen(false)}>
-                <button className="w-full mt-2 py-2.5 bg-emerald-500 text-white rounded-lg text-sm font-semibold">Get Started</button>
+                <button className="w-full mt-2 py-2.5 bg-action-primary text-action-primary-text hover:bg-action-primary-hover rounded-lg text-sm font-semibold transition-colors">Get Started</button>
               </Link>
             </>
           )}
           {user && (
             <>
-              {isAdmin   && <Link to="/admin"        onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Admin Dashboard</Link>}
-              {isCompany && <Link to="/company"      onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Fleet Dashboard</Link>}
-              {isCompany && <Link to="/truck"        onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Fleet & Trucks</Link>}
-              {isCompany && <Link to="/route"        onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Add Route</Link>}
-              {isAdmin   && <Link to="/mergeable" onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Route Optimization</Link>}
-              {isAdmin   && <Link to="/mergedSchedule" onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Consolidated Manifests</Link>}
-              {isTrader  && <Link to="/trader"       onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Consignments Dashboard</Link>}
-              {isTrader  && <Link to="/traderRequest"onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Request Delivery</Link>}
-              <Link to="/profile" onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Profile</Link>
-              <button onClick={HandleLogout} className="block py-2 text-red-400 text-sm">Logout</button>
+              {isAdmin   && <Link to="/admin"        onClick={() => setMobileOpen(false)} className="block py-2 text-ink-secondary hover:text-ink text-sm">Admin Dashboard</Link>}
+              {isCompany && <Link to="/company"      onClick={() => setMobileOpen(false)} className="block py-2 text-ink-secondary hover:text-ink text-sm">Fleet Dashboard</Link>}
+              {isCompany && <Link to="/truck"        onClick={() => setMobileOpen(false)} className="block py-2 text-ink-secondary hover:text-ink text-sm">Fleet & Trucks</Link>}
+              {isCompany && <Link to="/route"        onClick={() => setMobileOpen(false)} className="block py-2 text-ink-secondary hover:text-ink text-sm">Add Route</Link>}
+              {isAdmin   && <Link to="/mergeable" onClick={() => setMobileOpen(false)} className="block py-2 text-ink-secondary hover:text-ink text-sm">Route Optimization</Link>}
+              {isAdmin   && <Link to="/mergedSchedule" onClick={() => setMobileOpen(false)} className="block py-2 text-ink-secondary hover:text-ink text-sm">Consolidated Manifests</Link>}
+              {isTrader  && <Link to="/trader"       onClick={() => setMobileOpen(false)} className="block py-2 text-ink-secondary hover:text-ink text-sm">Consignments Dashboard</Link>}
+              {isTrader  && <Link to="/traderRequest"onClick={() => setMobileOpen(false)} className="block py-2 text-ink-secondary hover:text-ink text-sm">Request Delivery</Link>}
+              <Link to="/profile" onClick={() => setMobileOpen(false)} className="block py-2 text-ink-secondary hover:text-ink text-sm">Profile</Link>
+              <button onClick={HandleLogout} className="block py-2 text-signal-coral hover:text-signal-coral/80 text-sm">Logout</button>
             </>
           )}
         </div>

@@ -35,7 +35,7 @@ export const SearchInput = React.forwardRef(({
           type="button"
           onClick={onClear}
           aria-label="Clear search"
-          className="absolute right-3 p-0.5 rounded text-ink-subtle hover:text-ink hover:bg-white/10 transition-colors"
+          className="absolute right-3 p-0.5 rounded text-ink-subtle hover:text-ink hover:bg-surface-hover transition-colors"
         >
           <X className="w-3.5 h-3.5" />
         </button>

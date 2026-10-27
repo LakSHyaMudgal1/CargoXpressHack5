@@ -454,7 +454,7 @@ const Truck = () => {
                 }`}
               >
                 <span>{tab.label}</span>
-                <span className="font-mono text-xs px-1.5 py-0.2 rounded bg-white/5 text-ink-subtle">
+                <span className="font-mono text-xs px-1.5 py-0.2 rounded bg-surface-subtle text-ink-subtle">
                   {tab.count}
                 </span>
               </button>

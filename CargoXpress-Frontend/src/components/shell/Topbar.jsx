@@ -1,8 +1,10 @@
 import React from 'react';
-import { Menu, LogOut, User, ChevronDown } from 'lucide-react';
+import { Menu, LogOut, User, ChevronDown, Palette } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Dropdown, DropdownItem, DropdownSeparator } from '../ui/Dropdown';
 import Badge from '../ui/Badge';
+import { ThemeSelector } from '../ui/ThemeSelector';
+import { useTheme } from '../../utils/themeContext';
 import { getUserRoleMeta } from './NavConfig';
 
 /**
@@ -15,6 +17,7 @@ export const Topbar = ({
   onLogout,
 }) => {
   const roleMeta = getUserRoleMeta(user);
+  const { currentTheme } = useTheme();
 
   return (
     <header className="sticky top-0 z-30 h-16 bg-surface/90 backdrop-blur-md border-b border-border px-4 sm:px-6 flex items-center justify-between gap-4">
@@ -23,7 +26,7 @@ export const Topbar = ({
         <button
           type="button"
           onClick={onOpenMobile}
-          className="p-2 rounded-lg text-ink-subtle hover:text-ink hover:bg-white/5 lg:hidden shrink-0"
+          className="p-2 rounded-lg text-ink-subtle hover:text-ink hover:bg-surface-hover lg:hidden shrink-0"
           aria-label="Open navigation menu"
         >
           <Menu className="w-5 h-5" />
@@ -52,6 +55,9 @@ export const Topbar = ({
           </div>
         )}
 
+        {/* Theme Presets Switcher */}
+        <ThemeSelector />
+
         {/* User Dropdown */}
         {user ? (
           <Dropdown
@@ -61,7 +67,7 @@ export const Topbar = ({
                 type="button"
                 className="flex items-center gap-2.5 p-1.5 pl-2.5 rounded-xl border border-border hover:border-border-muted bg-surface-elevated/80 hover:bg-surface-elevated transition-all select-none"
               >
-                <div className="w-7 h-7 rounded-lg overflow-hidden bg-white/10 ring-1 ring-border shrink-0 flex items-center justify-center text-xs font-bold text-signal-aqua">
+                <div className="w-7 h-7 rounded-lg overflow-hidden bg-surface-subtle ring-1 ring-border shrink-0 flex items-center justify-center text-xs font-bold text-signal-aqua">
                   {user.photoUrl ? (
                     <img
                       src={user.photoUrl}
@@ -105,6 +111,18 @@ export const Topbar = ({
                   My Profile
                 </DropdownItem>
 
+                <DropdownItem
+                  as={Link}
+                  to="/profile#appearance"
+                  icon={Palette}
+                  onClick={close}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span>Theme Settings</span>
+                    <span className="text-[10px] font-mono text-ink-subtle uppercase">{currentTheme.name}</span>
+                  </div>
+                </DropdownItem>
+
                 <DropdownSeparator />
 
                 <DropdownItem
@@ -123,7 +141,7 @@ export const Topbar = ({
         ) : (
           <Link
             to="/login"
-            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-signal-emerald text-canvas hover:bg-emerald-400 transition-colors"
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-action-primary text-action-primary-text hover:bg-action-primary-hover transition-colors"
           >
             Sign In
           </Link>

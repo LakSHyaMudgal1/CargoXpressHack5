@@ -18,10 +18,10 @@ export const StatCard = ({
   const isClickable = Boolean(onClick);
 
   const changeColors = {
-    positive: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/25',
+    positive: 'text-signal-emerald bg-signal-emerald/10 border-signal-emerald/25',
     negative: 'text-signal-coral bg-signal-coral/10 border-signal-coral/25',
     warning: 'text-signal-amber bg-signal-amber/10 border-signal-amber/25',
-    neutral: 'text-ink-muted bg-white/5 border-border',
+    neutral: 'text-ink-muted bg-surface-subtle border-border',
   };
 
   return (

@@ -289,7 +289,7 @@ const Login = () => {
               type="button"
               onClick={isLogin ? HandleLogin : HandleSignUp}
               disabled={loading}
-              className="w-full h-10 rounded-md bg-signal-emerald text-canvas font-semibold hover:bg-emerald-400 transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-wider select-none disabled:opacity-50 disabled:pointer-events-none mt-2 shadow-sm"
+              className="w-full h-10 rounded-md bg-action-primary text-action-primary-text font-semibold hover:bg-action-primary-hover transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-wider select-none disabled:opacity-50 disabled:pointer-events-none mt-2 shadow-sm"
             >
               {loading ? (
                 <span>Authenticating...</span>

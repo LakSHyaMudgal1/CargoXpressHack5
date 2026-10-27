@@ -1,42 +1,90 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-
-const ThemeContext = createContext(undefined);
-
-export function useTheme() {
-  const context = useContext(ThemeContext);
-  if (context === undefined) {
-    throw new Error('useTheme must be used within a ThemeProvider');
-  }
-  return context;
-}
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { ThemeContext } from '../utils/themeContext';
+import {
+  THEME_PRESETS,
+  DEFAULT_THEME_ID,
+  THEME_STORAGE_KEY,
+  sanitizeThemeId,
+  getThemePreset,
+  applyThemeToDOM,
+} from '../utils/themePresets';
 
 const ThemeProvider = ({ children }) => {
-  const [isDark, setIsDark] = useState(() => {
+  const [theme, setThemeState] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('theme') === 'dark';
+      try {
+        const raw = localStorage.getItem(THEME_STORAGE_KEY);
+        return sanitizeThemeId(raw);
+      } catch (err) {
+        console.warn('Unable to read stored theme from localStorage:', err);
+      }
     }
-    return false;
+    return DEFAULT_THEME_ID;
   });
 
-  useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.toggle('dark', isDark);
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-  }, [isDark]);
+  const currentTheme = useMemo(() => getThemePreset(theme), [theme]);
+  const isDark = currentTheme.mode === 'dark';
+  const isDefault = theme === DEFAULT_THEME_ID;
 
-  const toggleTheme = () => {
-    setIsDark(!isDark);
-  };
+  const setTheme = useCallback((newThemeId) => {
+    const safeId = sanitizeThemeId(newThemeId);
+    setThemeState(safeId);
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(THEME_STORAGE_KEY, safeId);
+      }
+    } catch (err) {
+      console.warn('Unable to persist theme to localStorage:', err);
+    }
+    applyThemeToDOM(safeId);
+  }, []);
+
+  const resetTheme = useCallback(() => {
+    setTheme(DEFAULT_THEME_ID);
+  }, [setTheme]);
+
+  // Synchronize with DOM and localStorage whenever theme changes
+  useEffect(() => {
+    applyThemeToDOM(theme);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch (err) {
+      console.warn('Unable to persist theme to localStorage:', err);
+    }
+  }, [theme]);
+
+  // Cross-tab synchronization via storage event
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleStorageChange = (e) => {
+      if (e.key === THEME_STORAGE_KEY) {
+        const updatedTheme = sanitizeThemeId(e.newValue);
+        setThemeState(updatedTheme);
+        applyThemeToDOM(updatedTheme);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  const contextValue = useMemo(
+    () => ({
+      theme,
+      currentTheme,
+      presets: THEME_PRESETS,
+      defaultThemeId: DEFAULT_THEME_ID,
+      setTheme,
+      resetTheme,
+      isDefault,
+      isDark,
+    }),
+    [theme, currentTheme, isDefault, isDark, setTheme, resetTheme]
+  );
 
   return (
-    <ThemeContext.Provider value={{ isDark, toggleTheme }}>
-      {/* <button
-        onClick={toggleTheme}
-        className="mt-20 fixed right-4 top-4 z-50 rounded-full bg-gray-200 p-2 text-gray-900 shadow-lg transition-colors hover:bg-gray-300 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700"
-        aria-label="Toggle theme"
-      >
-        {isDark ? <Sun className="h-6 w-6" /> : <Moon className="h-6 w-6" />}
-      </button> */}
+    <ThemeContext.Provider value={contextValue}>
       {children}
     </ThemeContext.Provider>
   );

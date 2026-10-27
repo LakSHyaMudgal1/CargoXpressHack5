@@ -10,6 +10,7 @@ import Card from "../components/ui/Card";
 import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
 import Badge from "../components/ui/Badge";
+import { ThemePreferencesCard } from "../components/ui/ThemePreferencesCard";
 import UserCard from "./UserCard";
 
 const EditProfile = ({ user }) => {
@@ -191,6 +192,9 @@ const EditProfile = ({ user }) => {
           <UserCard user={previewUser} />
         </div>
       </div>
+
+      {/* 3. Visual Appearance & Workspace Theme Preferences */}
+      <ThemePreferencesCard />
     </div>
   );
 };

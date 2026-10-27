@@ -12,5 +12,8 @@ export { PageHeader } from './PageHeader';
 export { StatCard } from './StatCard';
 export { EmptyState } from './EmptyState';
 export { Skeleton, TableSkeleton, CardSkeleton } from './Skeleton';
-export { ErrorPanel } from './ErrorPanel';
-export { ToastProvider, useToast } from './Toast';
+export { ToastProvider } from './Toast';
+export { useToast } from './ToastContext';
+export { ThemeSelector } from './ThemeSelector';
+export { ThemePreferencesCard } from './ThemePreferencesCard';
+

@@ -34,7 +34,7 @@ export const Select = React.forwardRef(({
           ref={ref}
           id={selectId}
           required={required}
-          className={`w-full appearance-none bg-surface-elevated/90 border rounded-md pl-3 pr-9 py-2 text-xs sm:text-sm text-ink transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-signal-aqua/80 focus:ring-offset-1 focus:ring-offset-canvas focus:border-transparent cursor-pointer ${
+          className={`w-full appearance-none bg-surface-elevated/90 border rounded-md pl-3 pr-9 py-2 text-xs sm:text-sm text-ink transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-signal-aqua/80 focus:ring-offset-1 focus:ring-offset-canvas focus:border-transparent cursor-pointer disabled:bg-surface-subtle/80 disabled:text-ink-muted disabled:border-border/60 disabled:cursor-not-allowed disabled:opacity-85 ${
             error
               ? 'border-signal-coral/60 focus:ring-signal-coral'
               : 'border-border hover:border-border-strong'

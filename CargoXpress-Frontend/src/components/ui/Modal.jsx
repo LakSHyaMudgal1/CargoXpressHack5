@@ -78,7 +78,7 @@ export const Modal = ({
                 type="button"
                 onClick={onClose}
                 aria-label="Close dialog"
-                className="p-1.5 rounded-lg text-ink-subtle hover:text-ink hover:bg-white/5 transition-colors"
+                className="p-1.5 rounded-lg text-ink-subtle hover:text-ink hover:bg-surface-hover transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>

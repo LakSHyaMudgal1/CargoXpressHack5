@@ -18,12 +18,14 @@ import TraderCard from "./Componenets/TraderCard";
 import MergeableTraders from "./Componenets/MergableTraders";
 
 import { ToastProvider } from "./components/ui/Toast";
+import ThemeProvider from "./Componenets/ThemeProvider";
 
 function App() {
   return (
     <Provider store={appStore}>
-      <ToastProvider>
-        <BrowserRouter basename="/">
+      <ThemeProvider>
+        <ToastProvider>
+          <BrowserRouter basename="/">
           <Routes>
             {/* Standalone — no navbar/footer */}
             <Route path="/login" element={<Login/>}/>
@@ -46,7 +48,8 @@ function App() {
             </Route>
           </Routes>
         </BrowserRouter>
-      </ToastProvider>
+        </ToastProvider>
+      </ThemeProvider>
     </Provider>
   );
 }

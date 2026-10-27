@@ -1,7 +1,17 @@
 import daisyui from "daisyui"
 
+function withOpacity(variableName) {
+  return ({ opacityValue }) => {
+    if (opacityValue !== undefined) {
+      return `rgba(var(${variableName}), ${opacityValue})`;
+    }
+    return `rgb(var(${variableName}))`;
+  };
+}
+
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: ['class', '[data-theme-mode="dark"]'],
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -14,51 +24,86 @@ export default {
         display: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
       },
       colors: {
-        // Deep obsidian canvas and surfaces
-        canvas: '#07090E',
+        // Semantic canvas and surface tokens
+        canvas: withOpacity('--color-canvas-rgb'),
         surface: {
-          DEFAULT: '#0E131F',
-          base: '#0D111A',
-          card: '#0E131F',
-          subtle: '#121824',
-          elevated: '#182030',
-          hover: '#1E293D',
-          active: '#24324D',
+          DEFAULT: withOpacity('--color-surface-rgb'),
+          base: withOpacity('--color-surface-base-rgb'),
+          card: withOpacity('--color-surface-rgb'),
+          subtle: withOpacity('--color-surface-subtle-rgb'),
+          elevated: withOpacity('--color-surface-elevated-rgb'),
+          hover: withOpacity('--color-surface-hover-rgb'),
+          active: withOpacity('--color-surface-active-rgb'),
         },
         // Hairline borders and dividers
         border: {
-          DEFAULT: 'rgba(255, 255, 255, 0.08)',
-          subtle: 'rgba(255, 255, 255, 0.05)',
-          muted: 'rgba(255, 255, 255, 0.12)',
-          strong: 'rgba(255, 255, 255, 0.20)',
+          DEFAULT: ({ opacityValue }) => {
+            if (opacityValue !== undefined) {
+              return `rgba(var(--color-border-rgb), ${opacityValue})`;
+            }
+            return `rgba(var(--color-border-rgb), var(--color-border-alpha, 0.08))`;
+          },
+          subtle: ({ opacityValue }) => {
+            if (opacityValue !== undefined) {
+              return `rgba(var(--color-border-rgb), ${opacityValue})`;
+            }
+            return `rgba(var(--color-border-rgb), var(--color-border-subtle-alpha, 0.05))`;
+          },
+          muted: ({ opacityValue }) => {
+            if (opacityValue !== undefined) {
+              return `rgba(var(--color-border-rgb), ${opacityValue})`;
+            }
+            return `rgba(var(--color-border-rgb), var(--color-border-muted-alpha, 0.12))`;
+          },
+          strong: ({ opacityValue }) => {
+            if (opacityValue !== undefined) {
+              return `rgba(var(--color-border-rgb), ${opacityValue})`;
+            }
+            return `rgba(var(--color-border-rgb), var(--color-border-strong-alpha, 0.20))`;
+          },
         },
         // High-contrast ink typography hierarchy
         ink: {
-          DEFAULT: '#F8FAFC',
-          stark: '#FFFFFF',
-          secondary: '#CBD5E1',
-          muted: '#94A3B8',
-          subtle: '#64748B',
-          faint: '#475569',
+          DEFAULT: withOpacity('--color-ink-rgb'),
+          stark: withOpacity('--color-ink-stark-rgb'),
+          secondary: withOpacity('--color-ink-secondary-rgb'),
+          muted: withOpacity('--color-ink-muted-rgb'),
+          subtle: withOpacity('--color-ink-subtle-rgb'),
+          faint: withOpacity('--color-ink-subtle-rgb'),
         },
-        // Functional Freight & Telemetry Signals (CE-style strict semantic roles)
+        // Functional Freight & Telemetry Signals (Strict semantic roles)
         signal: {
-          aqua: '#19E8C8',    // Active Telemetry / En-Route / Live Connection
-          emerald: '#10B981', // Delivered / Merge Approved / Success / Brand
-          coral: '#FF4B3A',   // Exception / Delay / Cancellation / Destructive
-          amber: '#F59E0B',   // Warning / Pending Carrier / In-Progress Review
-          sky: '#0EA5E9',     // Route Waypoint / Information / Standard Transit
-          purple: '#8B5CF6',  // AI Algorithmic Merge / Consolidated Multi-Stop
+          aqua: withOpacity('--color-signal-aqua-rgb'),
+          emerald: withOpacity('--color-signal-emerald-rgb'),
+          coral: withOpacity('--color-signal-coral-rgb'),
+          amber: withOpacity('--color-signal-amber-rgb'),
+          sky: withOpacity('--color-signal-sky-rgb'),
+          purple: withOpacity('--color-signal-purple-rgb'),
+          // Semantic alias tokens
+          success: withOpacity('--color-signal-emerald-rgb'),
+          warning: withOpacity('--color-signal-amber-rgb'),
+          error: withOpacity('--color-signal-coral-rgb'),
+          info: withOpacity('--color-signal-aqua-rgb'),
+          accent: withOpacity('--color-signal-purple-rgb'),
         },
-        // Primary brand emerald palette
+        // Primary action tokens
+        action: {
+          primary: withOpacity('--color-primary-rgb'),
+          'primary-hover': withOpacity('--color-primary-hover-rgb'),
+          'primary-text': withOpacity('--color-primary-text-rgb'),
+          secondary: withOpacity('--color-secondary-bg-rgb'),
+          'secondary-hover': withOpacity('--color-secondary-hover-rgb'),
+          'secondary-text': withOpacity('--color-secondary-text-rgb'),
+        },
+        // Brand palette alias
         brand: {
           50: '#ECFDF5',
           100: '#D1FAE5',
           200: '#A7F3D0',
           300: '#6EE7B7',
           400: '#34D399',
-          500: '#10B981',
-          600: '#059669',
+          500: withOpacity('--color-primary-rgb'),
+          600: withOpacity('--color-primary-hover-rgb'),
           700: '#047857',
           800: '#065F46',
           900: '#064E3B',
@@ -85,11 +130,11 @@ export default {
       },
       boxShadow: {
         none: 'none',
-        sm: '0 1px 2px 0 rgba(0, 0, 0, 0.4)',
-        'subtle-card': '0 2px 8px -1px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08)',
-        'elevated-card': '0 8px 24px -4px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.12)',
-        'glow-aqua': '0 0 16px -4px rgba(25, 232, 200, 0.25)',
-        'glow-emerald': '0 0 16px -4px rgba(16, 185, 129, 0.25)',
+        sm: 'var(--shadow-sm, 0 1px 2px 0 rgba(0, 0, 0, 0.4))',
+        'subtle-card': 'var(--shadow-subtle-card, 0 2px 8px -1px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08))',
+        'elevated-card': 'var(--shadow-elevated-card, 0 8px 24px -4px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.12))',
+        'glow-aqua': '0 0 16px -4px rgba(var(--color-signal-aqua-rgb), 0.25)',
+        'glow-emerald': '0 0 16px -4px rgba(var(--color-signal-emerald-rgb), 0.25)',
       },
     },
   },

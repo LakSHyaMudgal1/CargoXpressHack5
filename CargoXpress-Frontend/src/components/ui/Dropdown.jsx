@@ -79,7 +79,7 @@ export const DropdownItem = ({
       className={`w-full text-left px-3.5 py-2 text-xs sm:text-sm font-medium flex items-center gap-2.5 transition-colors select-none ${
         destructive
           ? 'text-signal-coral hover:bg-signal-coral/10'
-          : 'text-ink-secondary hover:text-ink hover:bg-white/5'
+          : 'text-ink-secondary hover:text-ink hover:bg-surface-hover'
       } ${className}`}
       role="menuitem"
       {...props}

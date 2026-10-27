@@ -16,7 +16,7 @@ export const Skeleton = ({
 
   return (
     <div
-      className={`animate-pulse bg-white/[0.06] ${variants[variant] || variants.rectangular} ${className}`}
+      className={`animate-pulse bg-surface-subtle ${variants[variant] || variants.rectangular} ${className}`}
       {...props}
     />
   );

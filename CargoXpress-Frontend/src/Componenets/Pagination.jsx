@@ -11,7 +11,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
         aria-label="Previous page"
-        className="p-1.5 rounded-md bg-surface-elevated border border-border text-ink-muted hover:text-ink hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-surface-elevated disabled:hover:text-ink-muted transition-colors"
+        className="p-1.5 rounded-md bg-surface-elevated border border-border text-ink-muted hover:text-ink hover:bg-surface-hover disabled:opacity-30 disabled:hover:bg-surface-elevated disabled:hover:text-ink-muted transition-colors"
       >
         <ChevronLeft className="w-4 h-4" />
       </button>
@@ -23,7 +23,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
         aria-label="Next page"
-        className="p-1.5 rounded-md bg-surface-elevated border border-border text-ink-muted hover:text-ink hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-surface-elevated disabled:hover:text-ink-muted transition-colors"
+        className="p-1.5 rounded-md bg-surface-elevated border border-border text-ink-muted hover:text-ink hover:bg-surface-hover disabled:opacity-30 disabled:hover:bg-surface-elevated disabled:hover:text-ink-muted transition-colors"
       >
         <ChevronRight className="w-4 h-4" />
       </button>

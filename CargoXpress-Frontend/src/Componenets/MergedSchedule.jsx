@@ -266,7 +266,7 @@ const MergedSchedule = () => {
             >
               <GitMerge className="w-3.5 h-3.5" />
               <span>Consolidated Manifests</span>
-              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-white/5 text-ink-subtle">
+              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-surface-subtle text-ink-subtle">
                 {accepted.length}
               </span>
             </button>
@@ -282,7 +282,7 @@ const MergedSchedule = () => {
             >
               <Truck className="w-3.5 h-3.5" />
               <span>Independent Dispatches</span>
-              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-white/5 text-ink-subtle">
+              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-surface-subtle text-ink-subtle">
                 {rejected.length}
               </span>
             </button>
@@ -298,7 +298,7 @@ const MergedSchedule = () => {
             >
               <Boxes className="w-3.5 h-3.5" />
               <span>Trader Cargo</span>
-              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-white/5 text-ink-subtle">
+              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-surface-subtle text-ink-subtle">
                 {acceptedTraders.length}
               </span>
             </button>
@@ -355,7 +355,7 @@ const MergedSchedule = () => {
                               <button
                                 type="button"
                                 onClick={() => toggleRowExpanded(rowId)}
-                                className="p-1 rounded text-ink-subtle hover:text-ink hover:bg-white/5 transition-colors"
+                                className="p-1 rounded text-ink-subtle hover:text-ink hover:bg-surface-hover transition-colors"
                                 title={isExpanded ? "Collapse stops breakdown" : "Expand stops breakdown"}
                               >
                                 {isExpanded ? (

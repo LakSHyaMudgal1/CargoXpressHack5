@@ -44,7 +44,7 @@ export const TableBody = ({ children, className = '', ...props }) => (
 export const TableRow = ({ children, className = '', isSelected = false, hover = true, ...props }) => (
   <tr
     className={`transition-colors duration-150 ${
-      hover ? 'hover:bg-white/[0.03]' : ''
+      hover ? 'hover:bg-surface-hover/60' : ''
     } ${isSelected ? 'bg-signal-aqua/5' : ''} ${className}`}
     {...props}
   >
@@ -156,7 +156,7 @@ export const DataTable = ({
       {isLoading ? (
         <div className="w-full p-4 rounded-lg border border-border bg-surface/70 space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-9 w-full bg-white/[0.04] rounded-md animate-pulse" />
+            <div key={i} className="h-9 w-full bg-surface-subtle rounded-md animate-pulse" />
           ))}
         </div>
       ) : sortedData.length === 0 ? (
@@ -227,7 +227,7 @@ export const DataTable = ({
                     } ${
                       isSelected
                         ? 'bg-signal-aqua/10 hover:bg-signal-aqua/15'
-                        : 'hover:bg-white/[0.03]'
+                        : 'hover:bg-surface-hover/60'
                     }`}
                   >
                     {onSelectRow && (
@@ -277,7 +277,7 @@ export const DataTable = ({
               type="button"
               onClick={() => pagination.onPageChange(pagination.currentPage - 1)}
               disabled={pagination.currentPage <= 1}
-              className="px-2.5 py-1 rounded-lg bg-surface-elevated border border-border text-ink disabled:opacity-30 hover:bg-white/5 transition-colors"
+              className="px-2.5 py-1 rounded-lg bg-surface-elevated border border-border text-ink disabled:opacity-30 hover:bg-surface-hover transition-colors"
             >
               Previous
             </button>
@@ -288,7 +288,7 @@ export const DataTable = ({
               type="button"
               onClick={() => pagination.onPageChange(pagination.currentPage + 1)}
               disabled={pagination.currentPage >= pagination.totalPages}
-              className="px-2.5 py-1 rounded-lg bg-surface-elevated border border-border text-ink disabled:opacity-30 hover:bg-white/5 transition-colors"
+              className="px-2.5 py-1 rounded-lg bg-surface-elevated border border-border text-ink disabled:opacity-30 hover:bg-surface-hover transition-colors"
             >
               Next
             </button>
