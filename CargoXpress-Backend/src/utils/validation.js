@@ -30,6 +30,8 @@ const validateEditData=(req)=>{
       }
 }
 
+const { calculateRequiredCapacity } = require('./capacityCalculation');
+
 const validateTruckData=(req)=>{
     const {currentLoad, totalCapacity}=req.body;
     const capacity = Number(totalCapacity);
@@ -38,5 +40,21 @@ const validateTruckData=(req)=>{
     }
 }
 
+const validateTraderRequestData=(req)=>{
+    const { source, destination, load } = req.body;
+    if (!source || typeof source !== 'string' || !source.trim()) {
+        throw new Error("Source location is required");
+    }
+    if (!destination || typeof destination !== 'string' || !destination.trim()) {
+        throw new Error("Destination location is required");
+    }
+    return calculateRequiredCapacity(load);
+}
 
-module.exports={validateSignupData, validateEditData, validateTruckData};
+module.exports={
+    validateSignupData,
+    validateEditData,
+    validateTruckData,
+    validateTraderRequestData,
+    calculateRequiredCapacity
+};

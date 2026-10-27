@@ -461,8 +461,18 @@ tripStopExecutionSchema.statics.getOrCreateExecution = async function({ tripId, 
             status: 'accepted'
         });
 
+        const { calculateRequiredCapacity } = require('../utils/capacityCalculation');
         for (const tr of traderRequests) {
-            const trWeight = Array.isArray(tr.load) && tr.load.length > 0 ? tr.load[0] : 0;
+            let trWeight = 0;
+            if (typeof tr.requiredCapacity === 'number') {
+                trWeight = tr.requiredCapacity;
+            } else if (tr.load) {
+                try {
+                    trWeight = calculateRequiredCapacity(tr.load);
+                } catch (_) {
+                    trWeight = Array.isArray(tr.load) && tr.load.length > 0 ? tr.load[0] : 0;
+                }
+            }
             shipmentManifest.push({
                 shipmentId: tr.traderRequestId,
                 shipmentType: 'trader_request',

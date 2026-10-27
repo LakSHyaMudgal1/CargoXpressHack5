@@ -33,8 +33,17 @@ const Login = () => {
     setError(''); setLoading(true);
     try {
       const res = await axios.post(`${BASE_URL}/login`, { emailId, password }, { withCredentials: true });
-      dispatch(addUser(res.data));
-      emailId.endsWith('@cargoxpress.com') ? navigate('/admin') : navigate('/');
+      const userData = res.data;
+      dispatch(addUser(userData));
+      if (emailId.endsWith('@cargoxpress.com')) {
+        navigate('/admin');
+      } else if (userData.registrationNumber !== undefined) {
+        navigate('/company');
+      } else if (userData.aadharNumber !== undefined) {
+        navigate('/trader');
+      } else {
+        navigate('/');
+      }
     } catch (err) {
       const msg = err.response?.data?.message || err.response?.data || 'Invalid credentials.';
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
@@ -52,8 +61,15 @@ const Login = () => {
         },
         { withCredentials: true }
       );
-      dispatch(addUser(res.data.data));
-      navigate('/');
+      const userData = res.data.data;
+      dispatch(addUser(userData));
+      if (userRole === 'company') {
+        navigate('/company');
+      } else if (userRole === 'trader') {
+        navigate('/trader');
+      } else {
+        navigate('/');
+      }
     } catch (err) {
       const msg = err.response?.data?.message || err.response?.data || 'Sign up failed.';
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
@@ -112,27 +128,30 @@ const Login = () => {
       </div>
 
       {/* ════════════ RIGHT PANEL ════════════ */}
-      <div className="w-full lg:w-[45%] flex flex-col justify-center px-8 sm:px-14 bg-base-100 overflow-y-auto">
+      <div className="w-full lg:w-[45%] flex flex-col justify-center px-8 sm:px-14 bg-surface border-l border-border overflow-y-auto">
         <div className="w-full max-w-sm mx-auto py-10">
 
           {/* Mobile wordmark */}
-          <div className="lg:hidden flex items-center gap-2 mb-10">
-            <Truck className="h-6 w-6 text-green-500" />
-            <span className="font-bold text-lg bg-gradient-to-r from-green-500 to-blue-500 bg-clip-text text-transparent">
-              CargoXpress
+          <div className="lg:hidden flex items-center gap-2 mb-8">
+            <div className="w-8 h-8 rounded bg-surface-elevated border border-border flex items-center justify-center text-signal-aqua font-mono font-bold text-xs tracking-wider">
+              CX
+            </div>
+            <span className="font-bold text-lg text-ink">
+              Cargo<span className="text-signal-aqua">Xpress</span>
             </span>
           </div>
 
           {/* Tab toggle */}
-          <div className="flex bg-base-200 rounded-xl p-1 mb-8">
+          <div className="flex bg-surface-elevated rounded-md border border-border p-1 mb-8">
             {[['Sign In', true], ['Sign Up', false]].map(([label, loginTab]) => (
               <button
                 key={label}
+                type="button"
                 onClick={() => { if (isLogin !== loginTab) { setIsLogin(loginTab); reset(); } }}
-                className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
+                className={`flex-1 py-2 text-xs font-mono uppercase tracking-wider rounded transition-all select-none ${
                   isLogin === loginTab
-                    ? 'bg-base-100 shadow-sm text-base-content'
-                    : 'text-base-content/40 hover:text-base-content/70'
+                    ? 'bg-surface text-ink border border-border font-semibold shadow-sm'
+                    : 'text-ink-muted hover:text-ink'
                 }`}
               >
                 {label}
@@ -141,28 +160,29 @@ const Login = () => {
           </div>
 
           {/* Heading */}
-          <h1 className="text-2xl font-bold text-base-content">
-            {isLogin ? 'Welcome back' : 'Create account'}
+          <h1 className="text-xl sm:text-2xl font-bold text-ink tracking-tight">
+            {isLogin ? 'Access Dispatch Command' : 'Create Enterprise Account'}
           </h1>
-          <p className="text-sm text-base-content/40 mt-1 mb-7">
-            {isLogin ? 'Sign in to your account to continue.' : 'Get started — takes less than a minute.'}
+          <p className="text-xs text-ink-muted mt-1.5 mb-6 leading-relaxed">
+            {isLogin ? 'Authenticate with your authorized credentials.' : 'Register as a commercial carrier or commodity consignor.'}
           </p>
 
           <div className="space-y-4">
 
-            {/* Role pills */}
+            {/* Role selector */}
             {!isLogin && (
               <div>
-                <p className="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-2">Account type</p>
+                <p className="text-[11px] font-mono font-semibold text-ink-muted uppercase tracking-wider mb-2">Account Role</p>
                 <div className="flex gap-2">
-                  {[['trader','Trader', User],['company','Company', Building2]].map(([val,label,Icon]) => (
+                  {[['trader','Consignor Trader', User],['company','Transport Carrier', Building2]].map(([val,label,Icon]) => (
                     <button
                       key={val}
+                      type="button"
                       onClick={() => setUserRole(val)}
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md border text-xs font-medium transition-all ${
                         userRole === val
-                          ? 'border-green-500 bg-green-500/10 text-green-600'
-                          : 'border-base-300 text-base-content/50 hover:border-base-content/20'
+                          ? 'border-signal-emerald bg-signal-emerald/10 text-signal-emerald font-semibold shadow-sm'
+                          : 'border-border bg-surface-elevated text-ink-muted hover:text-ink hover:border-border-strong'
                       }`}
                     >
                       <Icon className="h-3.5 w-3.5" />{label}
@@ -174,84 +194,121 @@ const Login = () => {
 
             {/* Name */}
             {!isLogin && (
-              <Field label={userRole === 'company' ? 'Company name' : 'Full name'}>
+              <Field label={userRole === 'company' ? 'Enterprise / Carrier Name' : 'Consignor Full Name'}>
                 <InputIcon icon={<User className="h-4 w-4" />}>
-                  <input type="text" value={name} onChange={e => setName(e.target.value)} onKeyDown={onKey}
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    onKeyDown={onKey}
                     placeholder={userRole === 'company' ? 'Acme Logistics Pvt. Ltd.' : 'John Doe'}
-                    className="input input-bordered w-full pl-10 text-sm focus:outline-none focus:border-green-500" />
+                    className="w-full bg-surface-base border border-border text-ink placeholder:text-ink-subtle rounded-md pl-10 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-signal-aqua/80 focus:border-signal-aqua transition-all"
+                  />
                 </InputIcon>
               </Field>
             )}
 
             {/* Aadhar */}
             {!isLogin && userRole === 'trader' && (
-              <Field label="Aadhar number">
+              <Field label="Aadhaar UIDAI Number">
                 <InputIcon icon={<CreditCard className="h-4 w-4" />}>
-                  <input type="text" value={aadharNumber} onChange={e => setAadhar(e.target.value)} onKeyDown={onKey}
-                    placeholder="12-digit Aadhar" maxLength={12}
-                    className="input input-bordered w-full pl-10 text-sm focus:outline-none focus:border-green-500" />
+                  <input
+                    type="text"
+                    value={aadharNumber}
+                    onChange={e => setAadhar(e.target.value)}
+                    onKeyDown={onKey}
+                    placeholder="12-digit Aadhaar Number"
+                    maxLength={12}
+                    className="w-full bg-surface-base border border-border text-ink placeholder:text-ink-subtle rounded-md pl-10 pr-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-signal-aqua/80 focus:border-signal-aqua transition-all"
+                  />
                 </InputIcon>
               </Field>
             )}
 
             {/* Reg number */}
             {!isLogin && userRole === 'company' && (
-              <Field label="Registration number">
+              <Field label="Business Registration Number">
                 <InputIcon icon={<Hash className="h-4 w-4" />}>
-                  <input type="text" value={registrationNumber} onChange={e => setReg(e.target.value)} onKeyDown={onKey}
-                    placeholder="Company registration number"
-                    className="input input-bordered w-full pl-10 text-sm focus:outline-none focus:border-green-500" />
+                  <input
+                    type="text"
+                    value={registrationNumber}
+                    onChange={e => setReg(e.target.value)}
+                    onKeyDown={onKey}
+                    placeholder="e.g. U72900MH2020PTC123456"
+                    className="w-full bg-surface-base border border-border text-ink placeholder:text-ink-subtle rounded-md pl-10 pr-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-signal-aqua/80 focus:border-signal-aqua transition-all"
+                  />
                 </InputIcon>
               </Field>
             )}
 
             {/* Email */}
-            <Field label="Email address">
+            <Field label="Work Email Address">
               <InputIcon icon={<Mail className="h-4 w-4" />}>
-                <input type="email" value={emailId} onChange={e => setEmailId(e.target.value)} onKeyDown={onKey}
-                  placeholder="you@example.com"
-                  className="input input-bordered w-full pl-10 text-sm focus:outline-none focus:border-green-500" />
+                <input
+                  type="email"
+                  value={emailId}
+                  onChange={e => setEmailId(e.target.value)}
+                  onKeyDown={onKey}
+                  placeholder="name@company.com"
+                  className="w-full bg-surface-base border border-border text-ink placeholder:text-ink-subtle rounded-md pl-10 pr-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-signal-aqua/80 focus:border-signal-aqua transition-all"
+                />
               </InputIcon>
             </Field>
 
             {/* Password */}
             <Field label="Password">
               <InputIcon icon={<Lock className="h-4 w-4" />}>
-                <input type={showPassword ? 'text' : 'password'} value={password}
-                  onChange={e => setPassword(e.target.value)} onKeyDown={onKey}
-                  placeholder={isLogin ? '••••••••' : 'Min 8 chars, uppercase & symbol'}
-                  className="input input-bordered w-full pl-10 pr-10 text-sm focus:outline-none focus:border-green-500" />
-                <button type="button" onClick={() => setShowPassword(p => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-base-content/30 hover:text-base-content/60">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  onKeyDown={onKey}
+                  placeholder={isLogin ? '••••••••' : 'Min 8 chars with uppercase & symbol'}
+                  className="w-full bg-surface-base border border-border text-ink placeholder:text-ink-subtle rounded-md pl-10 pr-10 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-signal-aqua/80 focus:border-signal-aqua transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(p => !p)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-subtle hover:text-ink"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </InputIcon>
             </Field>
 
-            {/* Error */}
+            {/* Error banner */}
             {error && (
-              <p className="text-sm text-red-500 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2.5">
+              <div className="p-3 rounded-md bg-signal-coral/10 border border-signal-coral/20 text-signal-coral text-xs">
                 {error}
-              </p>
+              </div>
             )}
 
-            {/* CTA */}
+            {/* Submit Button */}
             <button
+              type="button"
               onClick={isLogin ? HandleLogin : HandleSignUp}
               disabled={loading}
-              className="btn w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white border-none font-semibold mt-1"
+              className="w-full h-10 rounded-md bg-signal-emerald text-canvas font-semibold hover:bg-emerald-400 transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-wider select-none disabled:opacity-50 disabled:pointer-events-none mt-2 shadow-sm"
             >
-              {loading
-                ? <span className="loading loading-spinner loading-sm" />
-                : <>{isLogin ? 'Sign In' : 'Create Account'}<ArrowRight className="h-4 w-4 ml-1.5" /></>
-              }
+              {loading ? (
+                <span>Authenticating...</span>
+              ) : (
+                <>
+                  <span>{isLogin ? 'Sign In to Portal' : 'Register Account'}</span>
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
             </button>
           </div>
 
-          <p className="text-center text-sm text-base-content/40 mt-6">
-            {isLogin ? "Don't have an account? " : 'Already have an account? '}
-            <button onClick={() => { setIsLogin(p => !p); reset(); }}
-              className="text-green-500 hover:text-green-600 font-semibold">
+          <p className="text-center text-xs text-ink-subtle mt-6">
+            {isLogin ? "Don't have an enterprise account? " : 'Already registered? '}
+            <button
+              type="button"
+              onClick={() => { setIsLogin(p => !p); reset(); }}
+              className="text-signal-aqua hover:underline font-semibold"
+            >
               {isLogin ? 'Sign up' : 'Sign in'}
             </button>
           </p>
@@ -264,14 +321,14 @@ const Login = () => {
 /* Small layout helpers */
 const Field = ({ label, children }) => (
   <div>
-    <label className="block text-sm font-medium text-base-content mb-1.5">{label}</label>
+    <label className="block text-[11px] font-mono uppercase tracking-wider text-ink-muted font-semibold mb-1.5">{label}</label>
     {children}
   </div>
 );
 
 const InputIcon = ({ icon, children }) => (
   <div className="relative">
-    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/30">{icon}</span>
+    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle pointer-events-none">{icon}</span>
     {children}
   </div>
 );

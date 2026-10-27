@@ -29,14 +29,29 @@ const companyAuth= async (req, res, next)=>{
         role: role
     };
 
+    if (role === 'admin') {
+        return res.status(403).json({
+            message: "Access denied. Admin users are not permitted to register trucks or create route schedules. Fleet operations are managed directly by transport carriers."
+        });
+    }
+
+    if (role !== 'transportCompany') {
+        return res.status(403).json({
+            message: "Access denied. Transport carrier role required."
+        });
+    }
+
     const company= await TransportCompany.findById(_id);
     if(!company){
-        throw new Error("Company not found");
+        return res.status(404).json({ message: "Company not found" });
     }
     req.company=company;
     next();
 }
     catch(err){
+        if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+            return res.status(401).json({ message: "Invalid or expired token" });
+        }
         res.status(400).send("There is some error"+ err);
     }
 }
@@ -55,14 +70,23 @@ const adminAuth= async (req, res, next)=>{
         role: role
     };
 
+    if (role !== 'admin') {
+        return res.status(403).json({
+            message: "Access denied. Admin role required."
+        });
+    }
+
     const admin= await Admin.findById(_id);
     if(!admin){
-        throw new Error("Admin not found");
+        return res.status(404).json({ message: "Admin not found" });
     }
     req.admin=admin;
     next();
 }
     catch(err){
+        if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+            return res.status(401).json({ message: "Invalid or expired token" });
+        }
         res.status(400).send("There is some error"+ err);
     }
 }
@@ -81,17 +105,69 @@ const traderAuth= async (req, res, next)=>{
         role: role
     };
 
+    if (role !== 'trader') {
+        return res.status(403).json({
+            message: "Access denied. Trader role required."
+        });
+    }
+
     const trader= await Trader.findById(_id);
     if(!trader){
-        throw new Error("Trader not found");
+        return res.status(404).json({ message: "Trader not found" });
     }
     req.trader=trader;
     next();
 }
     catch(err){
+        if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+            return res.status(401).json({ message: "Invalid or expired token" });
+        }
         res.status(400).send("There is some error"+ err);
     }
 }
+
+const traderOrAdminAuth = async (req, res, next) => {
+    try {
+        const token = extractToken(req);
+        if (!token) {
+            return res.status(401).send("Kindly Login");
+        }
+        const decodedData = await jwt.verify(token, process.env.JWT_SECRET);
+        const { _id, role } = decodedData;
+
+        req.user = {
+            id: _id,
+            role: role
+        };
+
+        if (role === 'admin') {
+            const admin = await Admin.findById(_id);
+            if (!admin) {
+                return res.status(404).json({ message: "Admin not found" });
+            }
+            req.admin = admin;
+            return next();
+        }
+
+        if (role === 'trader') {
+            const trader = await Trader.findById(_id);
+            if (!trader) {
+                return res.status(404).json({ message: "Trader not found" });
+            }
+            req.trader = trader;
+            return next();
+        }
+
+        return res.status(403).json({
+            message: "Access denied. Authorized trader or dispatch admin role required."
+        });
+    } catch (err) {
+        if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+            return res.status(401).json({ message: "Invalid or expired token" });
+        }
+        res.status(400).send("There is some error" + err);
+    }
+};
 
 const driverAuth= async (req, res, next)=>{
     try{
@@ -128,4 +204,4 @@ const driverAuth= async (req, res, next)=>{
     }
 }
 
-module.exports={companyAuth, adminAuth, traderAuth, driverAuth, extractToken};
+module.exports={companyAuth, adminAuth, traderAuth, traderOrAdminAuth, driverAuth, extractToken};

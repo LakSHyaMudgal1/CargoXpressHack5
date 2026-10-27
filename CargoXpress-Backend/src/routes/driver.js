@@ -21,7 +21,7 @@ const jwt = require('jsonwebtoken');
 const Admin = require('../models/admin');
 const Trader = require('../models/trader');
 
-const { driverAuth, companyAuth, adminAuth, traderAuth, extractToken } = require('../middlewares/auth');
+const { driverAuth, companyAuth, adminAuth, traderAuth, traderOrAdminAuth, extractToken } = require('../middlewares/auth');
 
 // ─── DRIVER SELF-SERVICE ENDPOINTS (Requires driverAuth) ─────────────────────
 
@@ -721,6 +721,20 @@ driverRouter.post('/driver/unassign', companyAuth, async (req, res) => {
         }
         if (truckId && !mongoose.Types.ObjectId.isValid(truckId)) {
             return res.status(400).json({ message: "Invalid truckId format" });
+        }
+
+        // Validate driver / truck ownership explicitly before unassigning
+        if (driverId) {
+            const driver = await Driver.findById(driverId);
+            if (driver && driver.companyId.toString() !== req.company._id.toString()) {
+                return res.status(403).json({ message: "Cannot unassign a driver belonging to another company" });
+            }
+        }
+        if (truckId) {
+            const truck = await Truck.findById(truckId);
+            if (truck && truck.companyId.toString() !== req.company._id.toString()) {
+                return res.status(403).json({ message: "Cannot unassign a truck belonging to another company" });
+            }
         }
 
         await DriverAssignment.unassignDriver({
@@ -1880,7 +1894,7 @@ const anyAuthorizedEvidenceAuth = async (req, res, next) => {
         if (role === 'driver') {
             const driver = await Driver.findById(_id);
             if (driver && driver.status !== 'disabled') req.driver = driver;
-        } else if (role === 'company' || role === 'transport_company') {
+        } else if (role === 'company' || role === 'transport_company' || role === 'transportCompany') {
             const company = await TransportCompany.findById(_id);
             if (company) req.company = company;
         } else if (role === 'admin') {
@@ -2735,10 +2749,13 @@ driverRouter.get('/admin/trip-stops/:tripId', adminAuth, async (req, res) => {
 
 /**
  * GET /trader/shipment-status/:traderRequestId
- * Trader shipment tracking: Provides status, current carrier, stop milestones,
- * and delivery confirmation without exposing unrelated carrier or cargo data.
+ * Trader shipment tracking & central dispatch tracking:
+ * - Scoped strictly to the authenticated trader identity (trader cannot view other traders' consignments)
+ * - Allows dispatch administrator platform-wide tracking across all consolidated consignments
+ * - Rejects unauthorized roles (transport company carriers, drivers, or anonymous callers)
+ * - Provides lifecycle status, vehicle plate, stop milestones, and proof of delivery without leaking competitor/consolidated freight
  */
-driverRouter.get('/trader/shipment-status/:traderRequestId', traderAuth, async (req, res) => {
+driverRouter.get('/trader/shipment-status/:traderRequestId', traderOrAdminAuth, async (req, res) => {
     try {
         const { traderRequestId } = req.params;
 
@@ -2751,12 +2768,28 @@ driverRouter.get('/trader/shipment-status/:traderRequestId', traderAuth, async (
             return res.status(404).json({ message: "Trader request not found." });
         }
 
-        // Authorization: Verify trader owns this request
-        if (traderRequest.traderId.toString() !== req.trader._id.toString()) {
-            return res.status(403).json({ message: "Access denied. You do not own this shipment request." });
+        // Authorization check:
+        // - Admin has platform-wide visibility across all trader consignments
+        // - Trader must strictly own this shipment request
+        if (req.user.role === 'trader') {
+            if (!req.trader || traderRequest.traderId.toString() !== req.trader._id.toString()) {
+                return res.status(403).json({ message: "Access denied. You do not own this shipment request." });
+            }
+        } else if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: "Access denied. Authorized trader or dispatch admin role required." });
         }
 
-        const reqWeight = Array.isArray(traderRequest.load) && traderRequest.load.length > 0 ? traderRequest.load[0] : 0;
+        const { calculateRequiredCapacity } = require('../utils/capacityCalculation');
+        let reqWeight = 0;
+        if (typeof traderRequest.requiredCapacity === 'number') {
+            reqWeight = traderRequest.requiredCapacity;
+        } else if (traderRequest.load) {
+            try {
+                reqWeight = calculateRequiredCapacity(traderRequest.load);
+            } catch (_) {
+                reqWeight = Array.isArray(traderRequest.load) && traderRequest.load.length > 0 ? traderRequest.load[0] : 0;
+            }
+        }
 
         // Search for execution document containing this shipment
         const execution = await TripStopExecution.findOne({
@@ -2764,27 +2797,65 @@ driverRouter.get('/trader/shipment-status/:traderRequestId', traderAuth, async (
         });
 
         if (!execution) {
+            // Check if merged/assigned in MergeableTrader
+            const MergeableTrader = mongoose.model('MergeableTrader');
+            const mergeable = await MergeableTrader.findOne({ traderRequestId });
+
+            let status = 'pending_dispatch';
+            let statusLabel = 'Pending Truck Assignment & Dispatch';
+            let carrierTruckLicensePlate = null;
+
+            const initialMilestones = [
+                {
+                    event: 'Consignment Created',
+                    location: traderRequest.source,
+                    timestamp: traderRequest.createdAt,
+                    completed: true
+                }
+            ];
+
+            if (mergeable && mergeable.status === 'accepted') {
+                status = 'scheduled';
+                statusLabel = 'Assigned to Vehicle — Scheduled';
+                carrierTruckLicensePlate = mergeable.truckLicensePlate || null;
+                initialMilestones.push({
+                    event: 'Assigned to Vehicle',
+                    location: traderRequest.source,
+                    timestamp: mergeable.createdAt || Date.now(),
+                    completed: true
+                });
+            }
+
             return res.json({
                 traderRequestId,
                 source: traderRequest.source,
                 destination: traderRequest.destination,
                 weightKg: reqWeight,
-                status: 'pending_dispatch',
-                statusLabel: 'Pending Truck Assignment & Dispatch',
-                carrierTruckLicensePlate: null,
-                milestones: []
+                status,
+                statusLabel,
+                carrierTruckLicensePlate,
+                pickupStopName: traderRequest.source,
+                deliveryStopName: traderRequest.destination,
+                pickedUpAt: null,
+                deliveredAt: null,
+                proofOfDelivery: null,
+                milestones: initialMilestones
             });
         }
 
         // Find pickup and delivery stops
         let pickupStop = null;
         let deliveryStop = null;
+        let deliveryShipment = null;
 
         for (const stop of execution.stops) {
             for (const s of stop.shipments) {
                 if (s.shipmentId === traderRequestId) {
                     if (s.operation === 'pickup') pickupStop = stop;
-                    if (s.operation === 'delivery') deliveryStop = stop;
+                    if (s.operation === 'delivery') {
+                        deliveryStop = stop;
+                        deliveryShipment = s;
+                    }
                 }
             }
         }
@@ -2792,10 +2863,16 @@ driverRouter.get('/trader/shipment-status/:traderRequestId', traderAuth, async (
         let overallStatus = 'in_transit';
         let statusLabel = 'In Transit';
 
-        if (deliveryStop && deliveryStop.status === 'completed') {
+        if (deliveryShipment && (deliveryShipment.status === 'partial' || deliveryShipment.status === 'partially_delivered' || (typeof deliveryShipment.deliveredWeightKg === 'number' && deliveryShipment.deliveredWeightKg > 0 && deliveryShipment.outstandingWeightKg > 0))) {
+            overallStatus = 'partially_delivered';
+            statusLabel = `Partially Delivered (${deliveryShipment.deliveredWeightKg} kg delivered, ${deliveryShipment.outstandingWeightKg} kg remaining)`;
+        } else if (deliveryStop && deliveryStop.status === 'completed') {
             overallStatus = 'delivered';
             statusLabel = 'Delivered to Destination';
         } else if (deliveryStop && deliveryStop.status === 'failed') {
+            overallStatus = 'delivery_failed';
+            statusLabel = 'Delivery Attempt Failed';
+        } else if (deliveryShipment && deliveryShipment.status === 'failed') {
             overallStatus = 'delivery_failed';
             statusLabel = 'Delivery Attempt Failed';
         } else if (pickupStop && pickupStop.status === 'completed') {
@@ -2813,19 +2890,41 @@ driverRouter.get('/trader/shipment-status/:traderRequestId', traderAuth, async (
         }
 
         // Return clean milestones without exposing other consolidated shipments
-        const milestones = execution.stops.map(st => ({
-            stopName: st.stopName,
-            stopType: st.stopType,
-            status: st.status,
-            arrivedAt: st.arrivedAt,
-            completedAt: st.completedAt
-        }));
+        const milestones = [
+            {
+                event: 'Consignment Created',
+                location: traderRequest.source,
+                timestamp: traderRequest.createdAt,
+                completed: true
+            },
+            ...execution.stops.map(st => ({
+                event: `${st.stopType === 'pickup' ? 'Pickup Stop' : st.stopType === 'delivery' ? (overallStatus === 'partially_delivered' ? 'Delivery Stop (Partial)' : 'Delivery Stop') : 'Waypoint'}: ${st.stopName}`,
+                location: st.stopName,
+                stopName: st.stopName,
+                stopType: st.stopType,
+                status: st.status,
+                completed: st.status === 'completed' || (st.stopType === 'delivery' && overallStatus === 'partially_delivered'),
+                error: st.status === 'failed' ? (st.failureReason || 'Stop operation failed') : null,
+                timestamp: st.completedAt || st.arrivedAt || null,
+                arrivedAt: st.arrivedAt,
+                completedAt: st.completedAt
+            }))
+        ];
+
+        const deliveredKg = deliveryShipment 
+            ? (typeof deliveryShipment.deliveredWeightKg === 'number' ? deliveryShipment.deliveredWeightKg : (overallStatus === 'delivered' ? reqWeight : 0)) 
+            : (overallStatus === 'delivered' ? reqWeight : 0);
+        const outstandingKg = deliveryShipment 
+            ? (typeof deliveryShipment.outstandingWeightKg === 'number' ? deliveryShipment.outstandingWeightKg : (overallStatus === 'delivered' ? 0 : reqWeight)) 
+            : (overallStatus === 'delivered' ? 0 : reqWeight);
 
         res.json({
             traderRequestId,
             source: traderRequest.source,
             destination: traderRequest.destination,
             weightKg: reqWeight,
+            deliveredWeightKg: deliveredKg,
+            outstandingWeightKg: outstandingKg,
             status: overallStatus,
             statusLabel,
             carrierTruckLicensePlate: execution.truckLicensePlate,

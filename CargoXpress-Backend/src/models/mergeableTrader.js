@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
+const { calculateRequiredCapacity } = require('../utils/capacityCalculation');
 
 const mergeableTraderSchema = new Schema({
     traderRequestId: {
@@ -18,6 +19,9 @@ const mergeableTraderSchema = new Schema({
     load: {
         type: [Number],
     },
+    requiredCapacity: {
+        type: Number,
+    },
     source: {
         type: String,
     },
@@ -34,4 +38,27 @@ const mergeableTraderSchema = new Schema({
     }
 }, { timestamps: true });
 
+mergeableTraderSchema.pre('validate', function(next) {
+    if (this.load && (Array.isArray(this.load) ? this.load.length > 0 : true)) {
+        try {
+            this.requiredCapacity = calculateRequiredCapacity(this.load);
+        } catch (err) {
+            return next(err);
+        }
+    }
+    next();
+});
+
+mergeableTraderSchema.pre('save', function(next) {
+    if (this.load && (Array.isArray(this.load) ? this.load.length > 0 : true)) {
+        try {
+            this.requiredCapacity = calculateRequiredCapacity(this.load);
+        } catch (err) {
+            return next(err);
+        }
+    }
+    next();
+});
+
 module.exports = mongoose.model("MergeableTrader", mergeableTraderSchema);
+

@@ -97,13 +97,13 @@ const HeroSection = () => {
             {/* Stats strip */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {stats.map(({ icon: Icon, value, label }) => (
-                <div key={label} className="flex items-center gap-3 p-4 rounded-xl bg-white/3 border border-white/5 backdrop-blur-sm hover:bg-white/5 transition-all">
-                  <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
-                    <Icon className="h-4 w-4 text-emerald-400" />
+                <div key={label} className="flex items-center gap-3 p-4 rounded-xl bg-surface/80 border border-border backdrop-blur-sm hover:border-border-strong hover:bg-surface-elevated/70 transition-all shadow-subtle-card">
+                  <div className="w-9 h-9 rounded-lg bg-signal-emerald/10 border border-signal-emerald/20 flex items-center justify-center flex-shrink-0">
+                    <Icon className="h-4 w-4 text-signal-emerald" />
                   </div>
                   <div>
-                    <p className="text-lg font-bold text-white leading-none">{value}</p>
-                    <p className="text-xs text-white/40 mt-0.5">{label}</p>
+                    <p className="text-lg font-bold text-ink leading-none font-mono tabular-nums">{value}</p>
+                    <p className="text-xs text-ink-muted mt-1">{label}</p>
                   </div>
                 </div>
               ))}
@@ -113,7 +113,7 @@ const HeroSection = () => {
       </div>
 
       {/* Bottom fade */}
-      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-gray-950 to-transparent" />
+      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-canvas to-transparent pointer-events-none" />
     </section>
   );
 };

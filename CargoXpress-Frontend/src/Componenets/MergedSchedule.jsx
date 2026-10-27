@@ -1,23 +1,38 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
+import { useToast } from "../components/ui/Toast";
+import { BASE_URL } from "../utils/constants";
+import { calculateRequiredCapacity } from "../utils/capacityCalculation";
 import {
   Truck,
-  Navigation,
-  Package,
-  PackageCheck,
   GitMerge,
-  BarChart3,
-  Users,
+  CalendarClock,
   CheckCircle2,
   XCircle,
-  ShieldCheck,
   Clock,
-  MapPin,
-  X,
-  AlertCircle,
-  FileText
+  Eye,
+  RefreshCw,
+  RotateCcw,
+  Boxes,
+  Loader2,
+  ArrowRight,
+  ChevronDown,
+  ChevronRight,
+  PackagePlus,
+  PackageCheck
 } from "lucide-react";
-import axios from "axios";
-import { BASE_URL } from "../utils/constants";
+import PageHeader from "../components/ui/PageHeader";
+import StatCard from "../components/ui/StatCard";
+import Badge from "../components/ui/Badge";
+import Button from "../components/ui/Button";
+import SearchInput from "../components/ui/SearchInput";
+import Modal from "../components/ui/Modal";
+import EmptyState from "../components/ui/EmptyState";
+import ErrorPanel from "../components/ui/ErrorPanel";
+import { CardSkeleton } from "../components/ui/Skeleton";
+import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from "../components/ui/Table";
 import Pagination from "./Pagination";
 
 const MergedSchedule = () => {
@@ -25,29 +40,43 @@ const MergedSchedule = () => {
   const [acceptedTraders, setAcceptedTraders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState("consolidated"); // "consolidated" | "independent" | "traders"
+  const [expandedRows, setExpandedRows] = useState({});
+
   const [currentPageAccepted, setCurrentPageAccepted] = useState(1);
   const [currentPageRejected, setCurrentPageRejected] = useState(1);
   const [currentPageTraders, setCurrentPageTraders] = useState(1);
-  const itemsPerPage = 5;
+  const itemsPerPage = 6;
 
   // Live stop execution & POD modal state
   const [selectedTripStops, setSelectedTripStops] = useState(null);
+  const [isStopsModalOpen, setIsStopsModalOpen] = useState(false);
   const [loadingStops, setLoadingStops] = useState(false);
   const [stopsError, setStopsError] = useState("");
 
   // Trader shipment live tracking modal state
   const [selectedTraderTracking, setSelectedTraderTracking] = useState(null);
+  const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
   const [loadingTracking, setLoadingTracking] = useState(false);
   const [trackingError, setTrackingError] = useState("");
 
+  const toggleRowExpanded = (id) => {
+    setExpandedRows((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
+
   const handleViewTripStops = async (tripId) => {
     try {
+      setIsStopsModalOpen(true);
       setLoadingStops(true);
       setStopsError("");
       const res = await axios.get(`${BASE_URL}/admin/trip-stops/${tripId}`, { withCredentials: true });
       setSelectedTripStops(res.data);
     } catch (err) {
-      setStopsError(err.response?.data?.message || err.message || "Failed to load stops.");
+      setStopsError(err.response?.data?.message || err.message || "Failed to load live stops.");
     } finally {
       setLoadingStops(false);
     }
@@ -55,6 +84,7 @@ const MergedSchedule = () => {
 
   const handleViewTraderTracking = async (traderRequestId) => {
     try {
+      setIsTrackingModalOpen(true);
       setLoadingTracking(true);
       setTrackingError("");
       const res = await axios.get(`${BASE_URL}/trader/shipment-status/${traderRequestId}`, { withCredentials: true });
@@ -66,635 +96,905 @@ const MergedSchedule = () => {
     }
   };
 
-  const fetchMergedSchedule = async () => {
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+  const user = useSelector((store) => store.user);
+  const isCompany = !user?.emailId?.endsWith("@cargoxpress.com") && user?.registrationNumber !== undefined;
+  const isTrader = !user?.emailId?.endsWith("@cargoxpress.com") && user?.aadharNumber !== undefined;
+
+  const fetchMergedSchedule = useCallback(async () => {
+    if (isCompany || isTrader) return;
     try {
       setLoading(true);
+      setError("");
       const res = await axios.get(BASE_URL + "/mergedSchedule", { withCredentials: true });
       setMergedSchedule(res.data.mergedSchedules || []);
       setAcceptedTraders(res.data.acceptedTraders || []);
     } catch (err) {
       console.error("Error fetching merged schedule:", err);
-      setError("Failed to load schedule.");
+      setError(err.response?.data?.message || err.message || "Failed to load schedules.");
     } finally {
       setLoading(false);
     }
+  }, [isCompany, isTrader]);
+
+  useEffect(() => {
+    if (user && isCompany) {
+      showToast("neutral", "Access Restricted", "Consolidated manifests and merge schedules are managed by dispatch administration.");
+      navigate("/company", { replace: true });
+      return;
+    }
+    if (user && isTrader) {
+      showToast("neutral", "Access Restricted", "Consolidated dispatches and merge schedules are managed by dispatch administration.");
+      navigate("/trader", { replace: true });
+      return;
+    }
+    if (!isCompany && !isTrader) {
+      fetchMergedSchedule();
+    }
+  }, [user, isCompany, isTrader, navigate, fetchMergedSchedule, showToast]);
+
+  if (isCompany || isTrader) {
+    return null;
+  }
+
+  const accepted = mergedSchedule.filter((s) => s.status !== "rejected");
+  const rejected = mergedSchedule.filter((s) => s.status === "rejected");
+
+  // Search filtering
+  const filterList = (list) => {
+    if (!searchQuery.trim()) return list;
+    const q = searchQuery.toLowerCase();
+    return list.filter((item) => {
+      const plate = (item.transportationTruckLicensePlate || item.truckLicensePlate || "").toLowerCase();
+      const source = (item.finalSource || item.source || "").toLowerCase();
+      const dest = (item.finalDestination || item.destination || "").toLowerCase();
+      const stops = (item.stops || []).join(" ").toLowerCase();
+      const trader = (item.traderId?.name || "").toLowerCase();
+      return plate.includes(q) || source.includes(q) || dest.includes(q) || stops.includes(q) || trader.includes(q);
+    });
   };
 
-  useEffect(() => { fetchMergedSchedule(); }, []);
+  const filteredAccepted = filterList(accepted);
+  const filteredRejected = filterList(rejected);
+  const filteredTraders = filterList(acceptedTraders);
 
-  const accepted = mergedSchedule.filter(s => s.status !== 'rejected');
-  const rejected = mergedSchedule.filter(s => s.status === 'rejected');
+  const paginatedAccepted = filteredAccepted.slice(
+    (currentPageAccepted - 1) * itemsPerPage,
+    currentPageAccepted * itemsPerPage
+  );
+  const paginatedRejected = filteredRejected.slice(
+    (currentPageRejected - 1) * itemsPerPage,
+    currentPageRejected * itemsPerPage
+  );
+  const paginatedTraders = filteredTraders.slice(
+    (currentPageTraders - 1) * itemsPerPage,
+    currentPageTraders * itemsPerPage
+  );
+
+  const getStopStatusBadge = (status) => {
+    switch (status) {
+      case "completed":
+        return <Badge variant="emerald" size="sm" dot>Completed</Badge>;
+      case "in_progress":
+      case "arrived":
+      case "en_route":
+        return <Badge variant="aqua" size="sm" dot>En Route</Badge>;
+      case "failed":
+        return <Badge variant="coral" size="sm" dot>Failed Attempt</Badge>;
+      case "pending":
+      default:
+        return <Badge variant="neutral" size="sm">Pending</Badge>;
+    }
+  };
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="max-w-5xl mx-auto">
+    <div className="space-y-6 animate-in fade-in duration-200">
+      {/* 1. Cohesive Shared Page Header */}
+      <PageHeader
+        eyebrow="Algorithmic Dispatch Operations"
+        title="Consolidated Carrier Manifests"
+        description="Monitor multi-stop consolidated freight corridors, absorbed vehicle capacity offloading, and real-time delivery milestone execution."
+        badge={<Badge variant="aqua" dot>Live Operations</Badge>}
+        breadcrumbs={[
+          { label: "Dispatch", href: "/admin" },
+          { label: "Consolidated Manifests" },
+        ]}
+        actions={
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={fetchMergedSchedule}
+            isLoading={loading}
+            leftIcon={RefreshCw}
+          >
+            Refresh Manifests
+          </Button>
+        }
+      />
 
-        {/* Header */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 mb-4">
-            <Truck className="w-7 h-7 text-emerald-400" />
-          </div>
-          <p className="text-xs font-semibold text-emerald-400 tracking-widest uppercase mb-2">Operations</p>
-          <h1 className="text-4xl font-bold text-white">Final Merged Routes</h1>
-          <p className="text-white/40 mt-2 text-sm">All admin decisions — accepted merges and independently dispatched trucks</p>
-          <div className="mt-4">
-            <button 
-              onClick={() => document.getElementById('trader-cargo')?.scrollIntoView({ behavior: 'smooth' })} 
-              className="text-sm text-emerald-400 hover:text-emerald-300 font-medium underline underline-offset-4 transition-colors"
+      {/* Error State */}
+      {error && (
+        <ErrorPanel
+          title="Schedule Load Error"
+          message={error}
+          onRetry={fetchMergedSchedule}
+        />
+      )}
+
+      {/* 2. Key Metrics Strip (CE-Style Restrained Stat Blocks) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <StatCard
+          label="Consolidated Manifests"
+          value={accepted.length}
+          unit="Active Corridors"
+          subtitle="Multi-stop merged freight carriers"
+          change="Optimized"
+          changeType="positive"
+        />
+        <StatCard
+          label="Independent Dispatches"
+          value={rejected.length}
+          unit="Direct Trucks"
+          subtitle="Non-merged standalone vehicles"
+          change="Standard"
+          changeType="neutral"
+        />
+        <StatCard
+          label="Consolidated Trader Cargo"
+          value={acceptedTraders.length}
+          unit="Consignments"
+          subtitle="Trader loads merged onto carrier routes"
+          change="Multi-Consignor"
+          changeType="positive"
+        />
+      </div>
+
+      {/* 3. Segmented Navigation Tabs & Search Toolbar */}
+      <div className="space-y-4 pt-2 border-t border-border">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          {/* Segmented Filter Controls */}
+          <div className="inline-flex items-center p-1 rounded-md bg-surface-elevated border border-border shrink-0 overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => setActiveTab("consolidated")}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-mono uppercase tracking-wider transition-all select-none ${
+                activeTab === "consolidated"
+                  ? "bg-surface text-signal-aqua border border-border shadow-sm font-semibold"
+                  : "text-ink-muted hover:text-ink"
+              }`}
             >
-              Jump to Trader Cargo ↓
+              <GitMerge className="w-3.5 h-3.5" />
+              <span>Consolidated Manifests</span>
+              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-white/5 text-ink-subtle">
+                {accepted.length}
+              </span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("independent")}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-mono uppercase tracking-wider transition-all select-none ${
+                activeTab === "independent"
+                  ? "bg-surface text-signal-amber border border-border shadow-sm font-semibold"
+                  : "text-ink-muted hover:text-ink"
+              }`}
+            >
+              <Truck className="w-3.5 h-3.5" />
+              <span>Independent Dispatches</span>
+              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-white/5 text-ink-subtle">
+                {rejected.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("traders")}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-mono uppercase tracking-wider transition-all select-none ${
+                activeTab === "traders"
+                  ? "bg-surface text-signal-emerald border border-border shadow-sm font-semibold"
+                  : "text-ink-muted hover:text-ink"
+              }`}
+            >
+              <Boxes className="w-3.5 h-3.5" />
+              <span>Trader Cargo</span>
+              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-white/5 text-ink-subtle">
+                {acceptedTraders.length}
+              </span>
+            </button>
+          </div>
+
+          {/* Search Input */}
+          <div className="max-w-xs w-full">
+            <SearchInput
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onClear={() => setSearchQuery("")}
+              placeholder="Search plate, corridor, stop, or consignor..."
+            />
           </div>
         </div>
 
-        {loading && <p className="text-white/40 text-center py-10">Loading schedules...</p>}
-        {error && <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-center mb-6">{error}</p>}
-
-        {!loading && mergedSchedule.length === 0 && acceptedTraders.length === 0 && (
-          <div className="text-center py-16 rounded-2xl bg-white/3 border border-white/5">
-            <Truck className="w-10 h-10 text-white/20 mx-auto mb-3" />
-            <h3 className="text-lg font-semibold text-white mb-1">No Routes Yet</h3>
-            <p className="text-white/40 text-sm">Accept or reject truck merges to see routes here</p>
-          </div>
-        )}
-
-        {/* ── Section: Accepted Truck Merges ──────────────────────────── */}
-        {accepted.length > 0 && (
-          <section id="accepted-trucks" className="mb-10">
-            <div className="flex items-center gap-2 mb-5">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-              <h2 className="text-lg font-bold text-white">Accepted Merges ({accepted.length})</h2>
-              <span className="text-xs text-white/30">— one truck dispatches with combined load</span>
-            </div>
-            <div className="space-y-6">
-              {accepted.slice((currentPageAccepted - 1) * itemsPerPage, currentPageAccepted * itemsPerPage).map((truck, index) => (
-                <TruckCard
-                  key={truck._id || index}
-                  truck={truck}
-                  status="accepted"
-                  onViewStops={handleViewTripStops}
-                />
-              ))}
-            </div>
-            <Pagination
-              currentPage={currentPageAccepted}
-              totalPages={Math.ceil(accepted.length / itemsPerPage)}
-              onPageChange={(page) => {
-                setCurrentPageAccepted(page);
-                document.getElementById('accepted-trucks')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            />
-          </section>
-        )}
-
-        {/* ── Section: Rejected (Independent) Trucks ──────────────────── */}
-        {rejected.length > 0 && (
-          <section id="independent-trucks" className="mb-10">
-            <div className="flex items-center gap-2 mb-5">
-              <XCircle className="w-5 h-5 text-red-400" />
-              <h2 className="text-lg font-bold text-white">Independent Dispatch ({rejected.length})</h2>
-              <span className="text-xs text-white/30">— merge rejected, each truck goes separately</span>
-            </div>
-            <div className="space-y-6">
-              {rejected.slice((currentPageRejected - 1) * itemsPerPage, currentPageRejected * itemsPerPage).map((truck, index) => (
-                <TruckCard
-                  key={truck._id || index}
-                  truck={truck}
-                  status="rejected"
-                  onViewStops={handleViewTripStops}
-                />
-              ))}
-            </div>
-            <Pagination
-              currentPage={currentPageRejected}
-              totalPages={Math.ceil(rejected.length / itemsPerPage)}
-              onPageChange={(page) => {
-                setCurrentPageRejected(page);
-                document.getElementById('independent-trucks')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            />
-          </section>
-        )}
-
-        {/* ── Section: Accepted Trader Merges ─────────────────────────── */}
-        {acceptedTraders.length > 0 && (
-          <section id="trader-cargo">
-            <div className="flex items-center gap-2 mb-5">
-              <Users className="w-5 h-5 text-blue-400" />
-              <h2 className="text-lg font-bold text-white">Accepted Trader Cargo ({acceptedTraders.length})</h2>
-              <span className="text-xs text-white/30">— trader cargo merged with truck</span>
-            </div>
-            <div className="space-y-4">
-              {acceptedTraders.slice((currentPageTraders - 1) * itemsPerPage, currentPageTraders * itemsPerPage).map((trader, index) => {
-                // Find the matching truck schedule for remaining load context
-                const matchedSchedule = mergedSchedule.find(
-                  s => s.transportationTruckId === trader.truckId
-                );
-                return (
-                  <TraderCard
-                    key={trader._id || index}
-                    trader={trader}
-                    matchedSchedule={matchedSchedule}
-                    onTrackCargo={handleViewTraderTracking}
-                  />
-                );
-              })}
-            </div>
-            <Pagination
-              currentPage={currentPageTraders}
-              totalPages={Math.ceil(acceptedTraders.length / itemsPerPage)}
-              onPageChange={(page) => {
-                setCurrentPageTraders(page);
-                document.getElementById('trader-cargo')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            />
-          </section>
-        )}
-
-        {/* ── Modal: Live Stop Execution & Proof of Delivery (Admin Dispatch) ── */}
-        {selectedTripStops && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-gray-900 border border-white/10 rounded-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl">
-              <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-white/3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                    <Truck className="w-5 h-5 text-emerald-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-white">Trip Stops & Live Execution</h3>
-                    <p className="text-xs text-white/40">Truck: {selectedTripStops.truckLicensePlate} • Status: {selectedTripStops.lifecycleStatus.toUpperCase()}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedTripStops(null)}
-                  className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+        {/* ════════════ TAB 1: CONSOLIDATED CARRIER MANIFESTS ════════════ */}
+        {activeTab === "consolidated" && (
+          <div className="space-y-4">
+            {loading ? (
+              <div className="space-y-3">
+                <CardSkeleton />
+                <CardSkeleton />
               </div>
+            ) : paginatedAccepted.length > 0 ? (
+              <div className="space-y-3">
+                <Table>
+                  <TableHeader>
+                    <tr>
+                      <TableHead className="w-10 text-center">#</TableHead>
+                      <TableHead>Primary Carrier</TableHead>
+                      <TableHead>Corridor Route Pipeline</TableHead>
+                      <TableHead>Capacity Utilization</TableHead>
+                      <TableHead>Absorbed Fleet</TableHead>
+                      <TableHead align="right">Operational Manifest</TableHead>
+                    </tr>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedAccepted.map((schedule, idx) => {
+                      const rowId = schedule._id || idx;
+                      const isExpanded = Boolean(expandedRows[rowId]);
+                      const cap = schedule.totalCapacity || 1;
+                      const maxLoad = Array.isArray(schedule.finalCurrentLoad) && schedule.finalCurrentLoad.length > 0
+                        ? Math.max(...schedule.finalCurrentLoad)
+                        : 0;
+                      const utilPct = Math.min(100, Math.round((maxLoad / cap) * 100));
+                      const stopsList = schedule.stops || [];
 
-              <div className="p-6 overflow-y-auto space-y-6">
-                {/* Stats row */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <div className="p-3 rounded-xl bg-white/3 border border-white/5">
-                    <p className="text-xs text-white/40 mb-1">Current Onboard Load</p>
-                    <p className="text-base font-bold text-emerald-400">{selectedTripStops.currentLoadOnBoard?.toLocaleString()} kg</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-white/3 border border-white/5">
-                    <p className="text-xs text-white/40 mb-1">Delivered Freight</p>
-                    <p className="text-base font-bold text-blue-400">{selectedTripStops.totalDeliveredWeight?.toLocaleString()} kg</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-white/3 border border-white/5 col-span-2 sm:col-span-1">
-                    <p className="text-xs text-white/40 mb-1">Total Stops</p>
-                    <p className="text-base font-bold text-white">{selectedTripStops.stops?.length || 0}</p>
-                  </div>
-                </div>
+                      return (
+                        <React.Fragment key={rowId}>
+                          <TableRow hover className="group">
+                            {/* Expand Row Toggle */}
+                            <TableCell className="text-center">
+                              <button
+                                type="button"
+                                onClick={() => toggleRowExpanded(rowId)}
+                                className="p-1 rounded text-ink-subtle hover:text-ink hover:bg-white/5 transition-colors"
+                                title={isExpanded ? "Collapse stops breakdown" : "Expand stops breakdown"}
+                              >
+                                {isExpanded ? (
+                                  <ChevronDown className="w-3.5 h-3.5 text-signal-aqua" />
+                                ) : (
+                                  <ChevronRight className="w-3.5 h-3.5 text-ink-subtle" />
+                                )}
+                              </button>
+                            </TableCell>
 
-                {/* Stops timeline */}
-                <div className="space-y-4">
-                  <h4 className="text-xs font-semibold text-white/40 uppercase tracking-wider">Ordered Itinerary Stops</h4>
-                  {selectedTripStops.stops?.map((st, idx) => (
-                    <div key={idx} className="p-4 rounded-xl bg-white/3 border border-white/5 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold flex items-center justify-center">
-                            {idx + 1}
-                          </span>
-                          <span className="font-semibold text-white text-sm">{st.stopName}</span>
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-white/5 border border-white/10 text-white/60 uppercase">
-                            {st.stopType}
-                          </span>
-                        </div>
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${
-                          st.status === 'completed'
-                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                            : st.status === 'failed'
-                            ? 'bg-red-500/10 border-red-500/20 text-red-400'
-                            : st.status === 'in_progress' || st.status === 'arrived'
-                            ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
-                            : 'bg-white/5 border-white/10 text-white/40'
-                        }`}>
-                          {st.status.toUpperCase()}
-                        </span>
-                      </div>
+                            {/* Plate & Status */}
+                            <TableCell>
+                              <div className="flex flex-col gap-1">
+                                <span className="font-mono text-xs sm:text-sm font-semibold text-ink">
+                                  {schedule.transportationTruckLicensePlate}
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <Badge variant="aqua" size="sm" dot>
+                                    Lead Carrier
+                                  </Badge>
+                                </div>
+                              </div>
+                            </TableCell>
 
-                      {/* Shipments at this stop */}
-                      {st.shipments && st.shipments.length > 0 && (
-                        <div className="pl-8 space-y-1">
-                          {st.shipments.map((ship, sIdx) => (
-                            <div key={sIdx} className="text-xs text-white/60 flex items-center justify-between bg-black/20 px-3 py-1.5 rounded-lg border border-white/5">
-                              <span>{ship.operation === 'pickup' ? '▲ PICKUP' : '▼ DELIVER'}: {ship.reference} ({ship.cargoDescription})</span>
-                              <span className="font-medium text-white">{ship.weightKg} kg</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                            {/* Corridor Pipeline */}
+                            <TableCell>
+                              <div className="flex flex-col gap-1 min-w-[200px]">
+                                <div className="flex items-center gap-1.5 text-xs font-mono font-medium text-ink flex-wrap">
+                                  <span className="text-ink">{schedule.finalSource}</span>
+                                  <span className="text-ink-subtle">→</span>
+                                  <span className="text-ink">{schedule.finalDestination}</span>
+                                </div>
+                                <span className="text-[11px] font-mono text-ink-subtle">
+                                  {stopsList.length} total scheduled stops
+                                </span>
+                              </div>
+                            </TableCell>
 
-                      {/* Proof of Delivery Details if available */}
-                      {st.proofOfDelivery && (
-                        <div className="pl-8 p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-xs space-y-1">
-                          <div className="flex items-center justify-between text-emerald-400 font-semibold">
-                            <span className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> Proof of Delivery Captured</span>
-                            <span className="text-[10px] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 uppercase">{st.proofOfDelivery.verificationStatus.replace('_', ' ')}</span>
-                          </div>
-                          {st.recipient?.name && (
-                            <p className="text-white/80">Recipient: <span className="font-medium text-white">{st.recipient.name}</span> {st.recipient.phone && `(${st.recipient.phone})`}</p>
+                            {/* Capacity Utilization Progress Bar */}
+                            <TableCell isNumeric>
+                              <div className="flex flex-col gap-1.5 min-w-[150px]">
+                                <div className="flex items-center justify-between text-xs font-mono">
+                                  <span className="text-ink-subtle text-[11px]">Payload</span>
+                                  <span className="font-semibold text-ink">{utilPct}%</span>
+                                </div>
+                                <div className="w-full h-1.5 rounded-full bg-surface-elevated overflow-hidden border border-border">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-300 ${
+                                      utilPct > 90
+                                        ? "bg-signal-coral"
+                                        : utilPct > 70
+                                        ? "bg-signal-emerald"
+                                        : "bg-signal-aqua"
+                                    }`}
+                                    style={{ width: `${utilPct}%` }}
+                                  />
+                                </div>
+                                <span className="text-[10px] font-mono text-ink-subtle">
+                                  {maxLoad.toLocaleString()} / {cap.toLocaleString()} kg
+                                </span>
+                              </div>
+                            </TableCell>
+
+                            {/* Absorbed Fleet */}
+                            <TableCell>
+                              {schedule.mergedFromTrucks && schedule.mergedFromTrucks.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {schedule.mergedFromTrucks.map((mTruck, mIdx) => (
+                                    <span
+                                      key={mIdx}
+                                      className="px-2 py-0.5 rounded bg-surface-elevated border border-border font-mono text-[10.5px] text-ink-secondary flex items-center gap-1"
+                                    >
+                                      <RotateCcw className="w-2.5 h-2.5 text-signal-purple" />
+                                      {mTruck.licensePlate}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-ink-subtle font-mono text-[11px]">
+                                  Single Carrier
+                                </span>
+                              )}
+                            </TableCell>
+
+                            {/* Actions */}
+                            <TableCell align="right">
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => handleViewTripStops(schedule._id)}
+                                leftIcon={Eye}
+                              >
+                                Live Stops
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+
+                          {/* Expandable Corridor Drawer */}
+                          {isExpanded && (
+                            <TableRow className="bg-surface-subtle/40 border-b border-border/80">
+                              <TableCell colSpan={6} className="p-4 sm:p-5">
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <span className="cx-eyebrow text-ink-muted">
+                                      Itinerary Waypoint Progression & Segment Payload
+                                    </span>
+                                    <span className="font-mono text-[11px] text-ink-subtle">
+                                      {schedule.stops?.length || 0} Stops Recorded
+                                    </span>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 pt-1">
+                                    {(schedule.stops || []).map((stop, sIdx) => {
+                                      const curLoad = schedule.finalCurrentLoad?.[sIdx] ?? 0;
+                                      const remLoad = schedule.finalRemainingLoad?.[sIdx] ?? Math.max(0, cap - curLoad);
+
+                                      return (
+                                        <div
+                                          key={sIdx}
+                                          className="p-3 rounded-md bg-surface-elevated border border-border flex flex-col gap-1.5"
+                                        >
+                                          <div className="flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="w-4 h-4 rounded-full bg-signal-aqua/10 border border-signal-aqua/30 text-signal-aqua font-mono font-bold text-[10px] flex items-center justify-center">
+                                                {sIdx + 1}
+                                              </span>
+                                              <span className="font-semibold text-xs text-ink">{stop}</span>
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center justify-between text-[11px] font-mono text-ink-subtle border-t border-border/40 pt-1">
+                                            <span>Load: <strong className="text-ink">{curLoad.toLocaleString()} kg</strong></span>
+                                            <span>Headroom: {remLoad.toLocaleString()} kg</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
                           )}
-                          <p className="text-white/40 text-[11px]">Method: {st.proofOfDelivery.type?.toUpperCase()} {st.proofOfDelivery.otpCode ? `• OTP Code: ${st.proofOfDelivery.otpCode}` : ''}</p>
-                        </div>
-                      )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
 
-                      {/* Failure note */}
-                      {st.failureReason && (
-                        <div className="pl-8 p-3 rounded-lg bg-red-500/5 border border-red-500/20 text-xs text-red-400 flex items-center gap-2">
-                          <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                          <span>Failure Reason: {st.failureReason}</span>
-                        </div>
-                      )}
-
-                      {/* Audit transition history */}
-                      {st.transitionHistory && st.transitionHistory.length > 0 && (
-                        <div className="pl-8 pt-1 text-[11px] text-white/40 space-y-0.5 border-t border-white/5">
-                          <p className="font-medium text-white/50 mb-0.5">Audit Trail:</p>
-                          {st.transitionHistory.map((th, thIdx) => (
-                            <p key={thIdx}>
-                              • {new Date(th.timestamp).toLocaleTimeString()}: {th.fromStatus} → <span className="text-white/70">{th.toStatus}</span> by {th.driverName} {th.reason ? `("${th.reason}")` : ''}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Modal: Trader Live Shipment Tracking ────────────────────────── */}
-        {selectedTraderTracking && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-gray-900 border border-blue-500/20 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl">
-              <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-blue-500/5">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
-                    <Package className="w-5 h-5 text-blue-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-white">Cargo Tracking</h3>
-                    <p className="text-xs text-white/40">{selectedTraderTracking.source} → {selectedTraderTracking.destination}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedTraderTracking(null)}
-                  className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-5">
-                {/* Status banner */}
-                <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] uppercase font-bold tracking-wider text-blue-400">Live Status</p>
-                    <p className="text-base font-bold text-white">{selectedTraderTracking.statusLabel}</p>
-                  </div>
-                  <span className="text-xs px-3 py-1 rounded-full font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                    {selectedTraderTracking.carrierTruckLicensePlate || "Pending Truck"}
-                  </span>
-                </div>
-
-                {/* Cargo Details */}
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div className="p-3 rounded-lg bg-white/3 border border-white/5">
-                    <p className="text-white/40 mb-0.5">Cargo Weight</p>
-                    <p className="text-sm font-semibold text-white">{selectedTraderTracking.weightKg} kg</p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-white/3 border border-white/5">
-                    <p className="text-white/40 mb-0.5">Assigned Carrier</p>
-                    <p className="text-sm font-semibold text-white">{selectedTraderTracking.carrierTruckLicensePlate || "In Queue"}</p>
-                  </div>
-                </div>
-
-                {/* Route Milestones */}
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-white/40 uppercase tracking-wider">Transit Milestones</p>
-                  <div className="space-y-2">
-                    {selectedTraderTracking.milestones?.map((m, mIdx) => (
-                      <div key={mIdx} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-white/3 border border-white/5">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-3.5 h-3.5 text-blue-400" />
-                          <span className="text-white font-medium">{m.stopName}</span>
-                          <span className="text-[10px] text-white/40">({m.stopType})</span>
-                        </div>
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
-                          m.status === 'completed'
-                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                            : m.status === 'failed'
-                            ? 'bg-red-500/10 border-red-500/20 text-red-400'
-                            : 'bg-white/5 border-white/10 text-white/40'
-                        }`}>
-                          {m.status.toUpperCase()}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* POD Notice */}
-                {selectedTraderTracking.proofOfDelivery && (
-                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs space-y-1">
-                    <p className="text-emerald-400 font-semibold flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4" /> Proof of Delivery Received
-                    </p>
-                    <p className="text-white/60">Verification: {selectedTraderTracking.proofOfDelivery.verificationStatus?.replace('_', ' ')}</p>
+                {filteredAccepted.length > itemsPerPage && (
+                  <div className="flex justify-center pt-2">
+                    <Pagination
+                      currentPage={currentPageAccepted}
+                      totalPages={Math.ceil(filteredAccepted.length / itemsPerPage)}
+                      onPageChange={(page) => setCurrentPageAccepted(page)}
+                    />
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-        )}
-
-      </div>
-    </div>
-  );
-};
-
-// ── Sub-component: TruckCard ─────────────────────────────────────────────────
-
-const TruckCard = ({ truck, status, onViewStops }) => {
-  const isAccepted = status === 'accepted';
-
-  return (
-    <div className={`rounded-2xl bg-white/3 border overflow-hidden transition-all ${isAccepted ? "border-emerald-500/15" : "border-red-500/10"}`}>
-      {/* Header */}
-      <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-xl border flex items-center justify-center ${isAccepted ? "bg-emerald-500/10 border-emerald-500/20" : "bg-red-500/10 border-red-500/20"}`}>
-            <Truck className={`w-5 h-5 ${isAccepted ? "text-emerald-400" : "text-red-400"}`} />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-white">{truck.transportationTruckLicensePlate || "Unknown"}</h2>
-            <p className="text-xs text-white/40">{isAccepted ? "Primary dispatch vehicle" : "Independent dispatch"}</p>
-          </div>
-        </div>
-        <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${isAccepted ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border-red-500/20 text-red-400"}`}>
-          {isAccepted ? "Merged" : "Independent"}
-        </span>
-      </div>
-
-      <div className="p-6 space-y-4">
-        {/* Merged From — only for accepted */}
-        {isAccepted && truck.mergedFromTrucks && truck.mergedFromTrucks.length > 0 && (
-          <div className="p-4 rounded-xl bg-white/3 border border-white/5">
-            <div className="flex items-center gap-2 mb-3">
-              <GitMerge className="w-4 h-4 text-emerald-400" />
-              <span className="text-sm font-semibold text-white">Merged From</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {truck.mergedFromTrucks.map((t, i) => (
-                <span key={i} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center gap-1.5">
-                  <Truck className="w-3 h-3" /> {t.licensePlate}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Route */}
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-white/3 border border-white/5">
-          <Navigation className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-          <div>
-            <p className="text-xs text-white/30 mb-0.5">Route</p>
-            <p className="text-sm font-medium text-white">{truck.finalSource} → {truck.finalDestination}</p>
-          </div>
-        </div>
-
-        {/* Capacity bar graph */}
-        {truck.stops && truck.stops.length > 0 && truck.totalCapacity > 0 && (
-          <div className="p-4 rounded-xl bg-white/3 border border-white/5">
-            <div className="flex items-center gap-2 mb-4">
-              <BarChart3 className="w-4 h-4 text-emerald-400" />
-              <span className="text-sm font-semibold text-white">Capacity per Stop</span>
-            </div>
-            <div className="space-y-3">
-              {truck.stops.map((stop, i) => {
-                const cur = truck.finalCurrentLoad?.[i] || 0;
-                const rem = truck.finalRemainingLoad?.[i] || 0;
-                const cap = truck.totalCapacity;
-                return (
-                  <div key={i} className="space-y-1.5">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-white/60 font-medium">{stop}</span>
-                      <span className="text-white/40">{cur} / {cap} kg</span>
-                    </div>
-                    <div className="h-2.5 bg-white/5 rounded-full overflow-hidden flex">
-                      <div className="bg-emerald-500 transition-all" style={{ width: `${(cur / cap) * 100}%` }} />
-                      <div className="bg-emerald-500/20 transition-all" style={{ width: `${(rem / cap) * 100}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="flex gap-4 mt-3 pt-3 border-t border-white/5 text-xs">
-              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-emerald-500" /><span className="text-white/50">Load</span></div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-emerald-500/20" /><span className="text-white/50">Available</span></div>
-            </div>
-          </div>
-        )}
-
-        {/* Load numbers */}
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div className="flex items-start gap-3 p-4 rounded-xl bg-white/3 border border-white/5">
-            <Package className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-xs text-white/30 mb-1">Current Load (kg)</p>
-              <p className="text-sm font-medium text-white">{truck.finalCurrentLoad?.join(", ") || "—"}</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3 p-4 rounded-xl bg-white/3 border border-white/5">
-            <PackageCheck className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-xs text-white/30 mb-1">Remaining Capacity (kg)</p>
-              <p className="text-sm font-medium text-white">{truck.finalRemainingLoad?.join(", ") || "—"}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Button: Live Stops & POD */}
-        {onViewStops && (
-          <button
-            onClick={() => onViewStops(truck._id)}
-            className="w-full mt-2 py-2.5 px-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 font-semibold text-xs flex items-center justify-center gap-2 transition-colors"
-          >
-            <Clock className="w-4 h-4" /> View Live Stop Execution & POD
-          </button>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// ── Sub-component: TraderCard ────────────────────────────────────────────────
-
-const TraderCard = ({ trader, matchedSchedule, onTrackCargo }) => {
-  const traderLoad = Array.isArray(trader.load) ? trader.load : [];
-  const traderStops = Array.isArray(trader.stops) ? trader.stops : [];
-  const totalCapacity = matchedSchedule?.totalCapacity || 0;
-
-  return (
-    <div className="rounded-2xl bg-white/3 border border-blue-500/10 overflow-hidden">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
-            <Users className="w-4 h-4 text-blue-400" />
-          </div>
-          <div>
-            <span className="text-white font-semibold">Trader Cargo</span>
-            <span className="text-white/30 text-xs ml-2">
-              {trader.source} → {trader.destination}
-            </span>
-          </div>
-        </div>
-        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 border border-blue-500/20 text-blue-400">
-          {trader.licensePlate}
-        </span>
-      </div>
-
-      <div className="p-5 space-y-4">
-        {/* Per-stop breakdown */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <BarChart3 className="w-4 h-4 text-blue-400" />
-            <span className="text-sm font-semibold text-white">Load per Stop</span>
-            {totalCapacity > 0 && (
-              <span className="text-xs text-white/30 ml-1">
-                (truck capacity: {totalCapacity} kg)
-              </span>
+            ) : (
+              <EmptyState
+                icon={CalendarClock}
+                title="No Consolidated Schedules"
+                description={
+                  searchQuery
+                    ? `No manifests matched search query "${searchQuery}".`
+                    : "No approved consolidated carrier schedules exist in dispatch. Use Route Optimization to review merge candidates."
+                }
+              />
             )}
           </div>
+        )}
 
-          <div className="space-y-2">
-            {traderStops.map((stop, i) => {
-              const traderKg = traderLoad[i] || 0;
+        {/* ════════════ TAB 2: INDEPENDENT DISPATCHES ════════════ */}
+        {activeTab === "independent" && (
+          <div className="space-y-4">
+            {paginatedRejected.length > 0 ? (
+              <div className="space-y-3">
+                <Table>
+                  <TableHeader>
+                    <tr>
+                      <TableHead>Vehicle Plate</TableHead>
+                      <TableHead>Corridor Origin → Destination</TableHead>
+                      <TableHead>Waypoints</TableHead>
+                      <TableHead>Dispatch Status</TableHead>
+                      <TableHead align="right">Actions</TableHead>
+                    </tr>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedRejected.map((schedule, idx) => (
+                      <TableRow key={schedule._id || idx} hover>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Truck className="w-4 h-4 text-signal-amber" />
+                            <span className="font-mono text-xs sm:text-sm font-semibold text-ink">
+                              {schedule.transportationTruckLicensePlate}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-xs font-mono font-medium text-ink">
+                            <span>{schedule.finalSource}</span>
+                            <span className="text-ink-subtle mx-1.5">→</span>
+                            <span>{schedule.finalDestination}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell isNumeric>
+                          <span className="font-mono text-xs text-ink-subtle">
+                            {schedule.stops?.length || 0} stops
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="amber" size="sm">Independent Dispatch</Badge>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleViewTripStops(schedule._id)}
+                            leftIcon={Eye}
+                          >
+                            Inspect Stops
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
 
-              // Find remaining load on the truck at this stop from live schedule
-              const scheduleStopIdx = matchedSchedule?.stops?.indexOf(stop) ?? -1;
-              const truckRemaining = scheduleStopIdx !== -1
-                ? (matchedSchedule.finalRemainingLoad?.[scheduleStopIdx] ?? null)
-                : null;
-              const truckCurrent = scheduleStopIdx !== -1
-                ? (matchedSchedule.finalCurrentLoad?.[scheduleStopIdx] ?? null)
-                : null;
-
-              const usedPct = totalCapacity > 0 && truckCurrent !== null
-                ? Math.min((truckCurrent / totalCapacity) * 100, 100)
-                : 0;
-              const traderPct = totalCapacity > 0
-                ? Math.min((traderKg / totalCapacity) * 100, 100)
-                : 0;
-              const remainingPct = totalCapacity > 0 && truckRemaining !== null
-                ? Math.min((truckRemaining / totalCapacity) * 100, 100)
-                : 0;
-
-              return (
-                <div key={i} className="p-3 rounded-xl bg-white/3 border border-white/5 space-y-2">
-                  {/* Stop name + numbers */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center">
-                        <span className="text-blue-400 text-xs font-semibold">{i + 1}</span>
-                      </div>
-                      <span className="text-white/80 text-sm font-medium">{stop}</span>
-                    </div>
-                    <div className="text-right text-xs space-y-0.5">
-                      <p className="text-blue-400 font-semibold">+{traderKg} kg trader cargo</p>
-                      {truckRemaining !== null && (
-                        <p className="text-white/40">{truckRemaining} kg remaining in truck</p>
-                      )}
-                      {truckCurrent !== null && (
-                        <p className="text-white/30">{truckCurrent} kg total on truck</p>
-                      )}
-                    </div>
+                {filteredRejected.length > itemsPerPage && (
+                  <div className="flex justify-center pt-2">
+                    <Pagination
+                      currentPage={currentPageRejected}
+                      totalPages={Math.ceil(filteredRejected.length / itemsPerPage)}
+                      onPageChange={(page) => setCurrentPageRejected(page)}
+                    />
                   </div>
+                )}
+              </div>
+            ) : (
+              <EmptyState
+                icon={Truck}
+                title="No Independent Dispatches"
+                description="All operational vehicles in the dispatch network are currently consolidated or awaiting route assignment."
+              />
+            )}
+          </div>
+        )}
 
-                  {/* Bar: existing truck load | trader addition | remaining space */}
-                  {totalCapacity > 0 && (
-                    <div className="space-y-1">
-                      <div className="h-2 bg-white/5 rounded-full overflow-hidden flex">
-                        {/* Existing truck load minus this trader's contribution */}
-                        <div
-                          className="bg-emerald-500 transition-all"
-                          style={{ width: `${Math.max(usedPct - traderPct, 0)}%` }}
-                          title="Truck load (before trader)"
-                        />
-                        {/* This trader's addition */}
-                        <div
-                          className="bg-blue-400 transition-all"
-                          style={{ width: `${traderPct}%` }}
-                          title={`Trader cargo: ${traderKg} kg`}
-                        />
-                        {/* Remaining */}
-                        <div
-                          className="bg-white/10 transition-all"
-                          style={{ width: `${remainingPct}%` }}
-                          title={`Remaining: ${truckRemaining} kg`}
-                        />
-                      </div>
-                      <div className="flex gap-3 text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2.5 h-2.5 rounded bg-emerald-500" />
-                          <span className="text-white/40">Truck load</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2.5 h-2.5 rounded bg-blue-400" />
-                          <span className="text-white/40">Trader cargo</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2.5 h-2.5 rounded bg-white/10" />
-                          <span className="text-white/40">Remaining</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        {/* ════════════ TAB 3: CONSOLIDATED TRADER CARGO ════════════ */}
+        {activeTab === "traders" && (
+          <div className="space-y-4">
+            {paginatedTraders.length > 0 ? (
+              <div className="space-y-3">
+                <Table>
+                  <TableHeader>
+                    <tr>
+                      <TableHead>Consignor Trader</TableHead>
+                      <TableHead>Corridor Route</TableHead>
+                      <TableHead>Assigned Carrier Truck</TableHead>
+                      <TableHead>Required Capacity</TableHead>
+                      <TableHead>Consolidation Status</TableHead>
+                      <TableHead align="right">Shipment Progress</TableHead>
+                    </tr>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedTraders.map((trader, idx) => (
+                      <TableRow key={trader._id || idx} hover>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Boxes className="w-4 h-4 text-signal-emerald" />
+                            <span className="font-semibold text-xs sm:text-sm text-ink">
+                              {trader.traderId?.name || "Consignor Trader"}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-xs font-mono font-medium text-ink">
+                            <span>{trader.source}</span>
+                            <span className="text-ink-subtle mx-1.5">→</span>
+                            <span>{trader.destination}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-mono text-xs font-semibold text-signal-aqua">
+                            {trader.truckLicensePlate || "Pending Vehicle"}
+                          </span>
+                        </TableCell>
+                        <TableCell isNumeric>
+                          <span className="font-mono text-xs font-medium text-ink">
+                            {(trader.requiredCapacity || calculateRequiredCapacity(trader.load))?.toLocaleString()} kg
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="emerald" size="sm" dot>Consolidated</Badge>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleViewTraderTracking(trader.traderRequestId)}
+                            rightIcon={ArrowRight}
+                          >
+                            Track Cargo
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
 
-        {/* Summary row */}
-        <div className="grid grid-cols-3 gap-3 text-sm">
-          <div className="p-3 rounded-xl bg-white/3 border border-white/5">
-            <p className="text-xs text-white/30 mb-1">Total Trader Cargo</p>
-            <p className="text-blue-400 font-semibold">
-              {traderLoad.reduce((a, b) => a + b, 0)} kg total
-            </p>
+                {filteredTraders.length > itemsPerPage && (
+                  <div className="flex justify-center pt-2">
+                    <Pagination
+                      currentPage={currentPageTraders}
+                      totalPages={Math.ceil(filteredTraders.length / itemsPerPage)}
+                      onPageChange={(page) => setCurrentPageTraders(page)}
+                    />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <EmptyState
+                icon={Boxes}
+                title="No Trader Cargo Merged"
+                description="No trader cargo shipments are currently consolidated. Review Trader Merge Pool to merge pending consignments."
+              />
+            )}
           </div>
-          <div className="p-3 rounded-xl bg-white/3 border border-white/5">
-            <p className="text-xs text-white/30 mb-1">Assigned Truck</p>
-            <p className="text-white/80 font-medium">{trader.licensePlate}</p>
-          </div>
-          <div className="p-3 rounded-xl bg-white/3 border border-white/5">
-            <p className="text-xs text-white/30 mb-1">Truck Capacity</p>
-            <p className="text-white/80 font-medium">
-              {totalCapacity > 0 ? `${totalCapacity} kg` : "—"}
-            </p>
-          </div>
-        </div>
-
-        {/* Action Button: Live Cargo Tracking */}
-        {onTrackCargo && (
-          <button
-            onClick={() => onTrackCargo(trader.traderRequestId)}
-            className="w-full mt-2 py-2.5 px-4 rounded-xl bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 text-blue-400 font-semibold text-xs flex items-center justify-center gap-2 transition-colors"
-          >
-            <Navigation className="w-4 h-4" /> Live Cargo Tracking & Milestones
-          </button>
         )}
       </div>
+
+      {/* ════════════ MODAL 1: LIVE TRIP EXECUTION & STOP TIMELINE ════════════ */}
+      <Modal
+        isOpen={isStopsModalOpen}
+        onClose={() => {
+          setIsStopsModalOpen(false);
+          setSelectedTripStops(null);
+          setStopsError("");
+        }}
+        title="Live Stop Execution & Delivery Manifest"
+        description="Chronological delivery milestones, arrival timestamps, and consignment status along the active corridor."
+        size="lg"
+        footer={
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setIsStopsModalOpen(false);
+              setSelectedTripStops(null);
+              setStopsError("");
+            }}
+          >
+            Close Manifest
+          </Button>
+        }
+      >
+        {loadingStops ? (
+          <div className="py-12 flex flex-col items-center justify-center space-y-3 text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-signal-aqua" />
+            <p className="text-xs text-ink-muted">Retrieving live stop execution manifest from carrier telemetry...</p>
+          </div>
+        ) : stopsError ? (
+          <ErrorPanel
+            title="Telemetry Unavailable"
+            message={stopsError}
+            onRetry={() => selectedTripStops?._id && handleViewTripStops(selectedTripStops._id)}
+          />
+        ) : selectedTripStops ? (
+          <div className="space-y-5 text-xs">
+            {/* Header info */}
+            <div className="p-3.5 rounded-lg bg-surface-elevated border border-border grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-ink-subtle block">Carrier Truck</span>
+                <span className="font-mono font-semibold text-sm text-signal-aqua">
+                  {selectedTripStops.carrierTruckLicensePlate || "Carrier Vehicle"}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-ink-subtle block">Assigned Driver</span>
+                <span className="font-medium text-ink text-xs sm:text-sm">
+                  {selectedTripStops.driverName || "Driver Assigned"}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-ink-subtle block">Corridor Status</span>
+                <span className="font-mono text-xs font-semibold text-signal-emerald capitalize">
+                  {selectedTripStops.status?.replace(/_/g, " ") || "In Progress"}
+                </span>
+              </div>
+            </div>
+
+            {/* Vertical ordered stop timeline */}
+            <div className="space-y-3">
+              <span className="cx-eyebrow text-ink-muted">
+                Ordered Stops Execution Sequence ({selectedTripStops.stops?.length || 0})
+              </span>
+
+              <div className="relative pl-6 space-y-3 border-l border-border ml-2">
+                {(selectedTripStops.stops || []).map((stop, sIdx) => {
+                  const isCompleted = stop.status === "completed";
+                  const isFailed = stop.status === "failed";
+                  const isInProgress = ["in_progress", "arrived", "en_route"].includes(stop.status);
+
+                  return (
+                    <div key={stop._id || sIdx} className="relative group">
+                      {/* Timeline dot */}
+                      <div
+                        className={`absolute -left-[31px] top-1 w-5 h-5 rounded-full border flex items-center justify-center font-mono text-[9px] font-bold ${
+                          isCompleted
+                            ? "bg-signal-emerald/20 border-signal-emerald text-signal-emerald"
+                            : isFailed
+                            ? "bg-signal-coral/20 border-signal-coral text-signal-coral"
+                            : isInProgress
+                            ? "bg-signal-aqua/20 border-signal-aqua text-signal-aqua animate-pulse"
+                            : "bg-surface-elevated border-border text-ink-subtle"
+                        }`}
+                      >
+                        {stop.stopIndex != null ? stop.stopIndex + 1 : sIdx + 1}
+                      </div>
+
+                      {/* Stop Content Box */}
+                      <div className="p-3.5 rounded-lg bg-surface/70 border border-border space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-xs sm:text-sm text-ink">{stop.stopName}</span>
+                            <Badge
+                              variant={stop.stopType === "pickup" ? "aqua" : "purple"}
+                              size="sm"
+                              className="font-mono text-[10px]"
+                            >
+                              {stop.stopType === "pickup" ? (
+                                <span className="flex items-center gap-1">
+                                  <PackagePlus className="w-3 h-3" />
+                                  PICKUP
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1">
+                                  <PackageCheck className="w-3 h-3" />
+                                  DELIVERY
+                                </span>
+                              )}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] uppercase font-mono text-ink-subtle">Stop:</span>
+                            {getStopStatusBadge(stop.status)}
+                          </div>
+                        </div>
+
+                        {/* Timing info */}
+                        <div className="flex items-center gap-4 text-[11px] text-ink-subtle font-mono">
+                          {stop.arrivalAt && (
+                            <span>Arrived: {new Date(stop.arrivalAt).toLocaleTimeString()}</span>
+                          )}
+                          {stop.completedAt && (
+                            <span>Completed: {new Date(stop.completedAt).toLocaleTimeString()}</span>
+                          )}
+                        </div>
+
+                        {/* Shipments handled at this stop */}
+                        {stop.shipments && stop.shipments.length > 0 && (
+                          <div className="pt-2 border-t border-border/40 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-subtle block">
+                                Handled Cargo Consignments ({stop.shipments.length})
+                              </span>
+                              <span className="text-[10px] font-mono text-ink-subtle">
+                                Consignment Status vs Stop Execution
+                              </span>
+                            </div>
+
+                            <div className="space-y-2">
+                              {stop.shipments.map((ship, shipIdx) => {
+                                const hasOutstanding = ship.outstandingWeightKg != null && ship.outstandingWeightKg > 0;
+                                const isDelivered = ship.status === "delivered" || ship.status === "picked_up";
+                                const isPartial = ship.status === "partial" || ship.status === "partially_delivered";
+                                const isFailed = ship.status === "failed" || ship.status === "delivery_failed";
+
+                                return (
+                                  <div
+                                    key={ship._id || shipIdx}
+                                    className="p-2.5 rounded bg-surface-elevated border border-border space-y-1.5 text-xs"
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-semibold text-ink font-mono text-[11px]">{ship.reference}</span>
+                                        <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-surface text-ink-muted border border-border/60">
+                                          {ship.operation === "pickup" ? "Load Pickup" : "Drop-off Delivery"}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[10px] uppercase font-mono text-ink-subtle">Shipment:</span>
+                                        <Badge
+                                          variant={
+                                            isDelivered
+                                              ? "emerald"
+                                              : isPartial
+                                              ? "amber"
+                                              : isFailed
+                                              ? "coral"
+                                              : "neutral"
+                                          }
+                                          size="sm"
+                                          dot
+                                        >
+                                          {ship.status?.replace(/_/g, " ")}
+                                        </Badge>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between text-[11px] font-mono text-ink-subtle">
+                                      <span>{ship.cargoDescription || "General Freight"} • Total: {ship.weightKg} kg</span>
+                                      {ship.deliveredWeightKg != null && (
+                                        <span className="text-signal-emerald font-semibold">
+                                          Delivered: {ship.deliveredWeightKg} kg
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Outstanding operations callout */}
+                                    {hasOutstanding && (
+                                      <div className="p-1.5 rounded bg-signal-amber/10 border border-signal-amber/20 flex items-center justify-between text-[11px] font-mono text-signal-amber">
+                                        <span>Outstanding: <strong>{ship.outstandingWeightKg} kg</strong> remaining</span>
+                                        {ship.deliveryAttempts && ship.deliveryAttempts.length > 0 && (
+                                          <span className="text-[10px]">
+                                            {ship.deliveryAttempts.length} attempt{ship.deliveryAttempts.length > 1 ? "s" : ""} recorded
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {/* Failure callout if delivery failed */}
+                                    {isFailed && ship.failureReason && (
+                                      <div className="p-1.5 rounded bg-signal-coral/10 border border-signal-coral/20 text-signal-coral text-[11px]">
+                                        <strong>Consignment Exception:</strong> {ship.failureReason}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Failure reason callout if stop failed */}
+                        {stop.failureReason && (
+                          <div className="p-2.5 rounded bg-signal-coral/10 border border-signal-coral/20 text-signal-coral text-xs">
+                            <strong>Waypoint Stop Exception:</strong> {stop.failureReason}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      {/* ════════════ MODAL 2: TRADER CARGO TRACKING ════════════ */}
+      <Modal
+        isOpen={isTrackingModalOpen}
+        onClose={() => {
+          setIsTrackingModalOpen(false);
+          setSelectedTraderTracking(null);
+          setTrackingError("");
+        }}
+        title="Consignor Cargo Tracking"
+        description="Real-time freight transit progression and verification milestones."
+        footer={
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setIsTrackingModalOpen(false);
+              setSelectedTraderTracking(null);
+              setTrackingError("");
+            }}
+          >
+            Close Tracking
+          </Button>
+        }
+      >
+        {loadingTracking ? (
+          <div className="py-12 flex flex-col items-center justify-center space-y-3 text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-signal-emerald" />
+            <p className="text-xs text-ink-muted">Tracking consignment transit telemetry...</p>
+          </div>
+        ) : trackingError ? (
+          <ErrorPanel
+            title="Tracking Unavailable"
+            message={trackingError}
+          />
+        ) : selectedTraderTracking ? (
+          <div className="space-y-4 text-xs">
+            <div className="p-3.5 rounded-lg bg-surface-elevated border border-border space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-xs sm:text-sm text-ink">
+                  {selectedTraderTracking.source} → {selectedTraderTracking.destination}
+                </span>
+                <Badge variant="emerald" size="sm" dot>
+                  {selectedTraderTracking.statusLabel || "In Progress"}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between text-ink-subtle font-mono text-[11px] border-t border-border/40 pt-1.5">
+                <span>Weight: <strong className="text-ink">{selectedTraderTracking.weightKg} kg</strong></span>
+                <span>Carrier: <strong className="text-signal-aqua">{selectedTraderTracking.carrierTruckLicensePlate || "Assigned"}</strong></span>
+              </div>
+            </div>
+
+            {/* Milestones list */}
+            <div className="space-y-2">
+              <span className="cx-eyebrow text-ink-muted">
+                Milestone Verification History
+              </span>
+              <div className="space-y-2">
+                {(selectedTraderTracking.milestones || []).map((m, mIdx) => (
+                  <div key={mIdx} className="p-2.5 rounded-lg bg-surface border border-border flex items-center gap-3">
+                    {m.completed ? (
+                      <CheckCircle2 className="w-4 h-4 text-signal-emerald shrink-0" />
+                    ) : m.error ? (
+                      <XCircle className="w-4 h-4 text-signal-coral shrink-0" />
+                    ) : (
+                      <Clock className="w-4 h-4 text-ink-subtle shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-xs text-ink">{m.event}</p>
+                      {m.location && <p className="text-[11px] text-ink-subtle font-mono">{m.location}</p>}
+                    </div>
+                    {m.timestamp && (
+                      <span className="font-mono text-[10px] text-ink-subtle">
+                        {new Date(m.timestamp).toLocaleTimeString()}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 };

@@ -1,3 +1,157 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --color-canvas: #07090E;
+    --color-surface-base: #0D111A;
+    --color-surface: #0E131F;
+    --color-surface-subtle: #121824;
+    --color-surface-elevated: #182030;
+    --color-border: rgba(255, 255, 255, 0.08);
+    --color-border-subtle: rgba(255, 255, 255, 0.05);
+    --color-border-muted: rgba(255, 255, 255, 0.12);
+    --color-border-strong: rgba(255, 255, 255, 0.20);
+    --color-ink: #F8FAFC;
+    --color-ink-stark: #FFFFFF;
+    --color-ink-secondary: #CBD5E1;
+    --color-ink-muted: #94A3B8;
+    --color-ink-subtle: #64748B;
+    --color-signal-aqua: #19E8C8;
+    --color-signal-coral: #FF4B3A;
+    --color-signal-emerald: #10B981;
+    --color-signal-amber: #F59E0B;
+    --color-signal-sky: #0EA5E9;
+    --color-signal-purple: #8B5CF6;
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans antialiased selection:bg-brand-500/20 selection:text-brand-300;
+    min-height: 100vh;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    overflow-x: hidden;
+  }
+
+  /* Consistent Keyboard focus accessibility standard across all interactive elements */
+  :focus-visible {
+    @apply outline-none ring-2 ring-signal-aqua/80 ring-offset-2 ring-offset-canvas transition-all;
+  }
+
+  /* Custom subtle dark scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #07090E;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  /* Accessibility: Respect prefers-reduced-motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Architectural Typography Hierarchy */
+  .cx-display {
+    @apply text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tighter text-ink leading-[1.1];
+  }
+  .cx-h1 {
+    @apply text-2xl sm:text-3xl font-semibold tracking-tight text-ink leading-tight;
+  }
+  .cx-h2 {
+    @apply text-lg sm:text-xl font-semibold tracking-tight text-ink leading-snug;
+  }
+  .cx-h3 {
+    @apply text-sm sm:text-base font-semibold text-ink leading-normal;
+  }
+  .cx-body {
+    @apply text-xs sm:text-sm text-ink-secondary leading-relaxed;
+  }
+  .cx-caption {
+    @apply text-[11px] text-ink-subtle leading-tight;
+  }
+
+  /* Editorial Eyebrow with leading dash tick */
+  .cx-eyebrow {
+    @apply inline-flex items-center gap-2 text-[11px] font-semibold tracking-eyebrow uppercase text-ink-muted select-none;
+  }
+  .cx-eyebrow::before {
+    content: '';
+    display: inline-block;
+    width: 0.85rem;
+    height: 1px;
+    background-color: currentColor;
+    opacity: 0.7;
+  }
+
+  /* Tabular numbers for mission-critical logistics data */
+  .cx-num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum', 'zero';
+    @apply font-mono;
+  }
+
+  /* Shared Responsive Page Container */
+  .cx-page-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full;
+  }
+
+  /* Hairline borders */
+  .cx-hairline {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .cx-hairline-b {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .cx-hairline-t {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* Restrained CE-style card with hairline border */
+  .cx-card {
+    @apply bg-surface/90 border border-white/10 rounded-lg transition-all duration-200 ease-out;
+  }
+  .cx-card:hover {
+    @apply border-white/20 -translate-y-[1px] shadow-sm;
+  }
+
+  /* Interactive clickable row */
+  .cx-row-interactive {
+    @apply transition-colors duration-150 cursor-pointer hover:bg-white/[0.04] active:bg-white/[0.06];
+  }
+
+  /* Freight corridor linear progression indicator */
+  .cx-corridor-step {
+    @apply relative flex items-center gap-2 text-xs font-mono;
+  }
+  .cx-corridor-step:not(:last-child)::after {
+    content: '→';
+    @apply text-ink-subtle mx-1 font-sans;
+  }
+
+  /* Accessible micro-tooltip */
+  .cx-tooltip {
+    @apply relative inline-flex;
+  }
+  .cx-tooltip:hover::after {
+    content: attr(data-tooltip);
+    @apply absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded bg-surface-elevated text-ink text-[11px] font-mono whitespace-nowrap border border-border shadow-elevated-card pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-100;
+  }
+}

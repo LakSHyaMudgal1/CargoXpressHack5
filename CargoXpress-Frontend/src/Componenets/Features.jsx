@@ -4,75 +4,101 @@ const features = [
   {
     icon: GitMerge,
     title: 'Intelligent Cargo Merging',
-    desc: 'Our algorithm automatically finds trucks with compatible routes and merges shipments — maximising capacity utilisation and cutting empty miles.',
-    accent: 'from-emerald-500 to-teal-500',
+    desc: 'Algorithmic routing matches vehicles with compatible delivery corridors and consolidates shipments to maximize capacity utilization and eliminate empty miles.',
+    badge: 'Core Engine',
     span: 'md:col-span-2',
+    color: 'text-signal-aqua',
+    bg: 'bg-signal-aqua/10',
+    border: 'border-signal-aqua/20',
   },
   {
     icon: Route,
-    title: 'Route Optimization',
-    desc: 'Define multi-stop routes and let the platform match them with trader requests intelligently.',
-    accent: 'from-cyan-500 to-blue-500',
+    title: 'Corridor Optimization',
+    desc: 'Establish multi-stop transit corridors and allow the system to pair intermediate waypoints automatically.',
+    badge: 'Routing',
     span: '',
+    color: 'text-signal-emerald',
+    bg: 'bg-signal-emerald/10',
+    border: 'border-signal-emerald/20',
   },
   {
     icon: DollarSign,
-    title: 'Up to 40% Cost Savings',
-    desc: 'Shared logistics means shared cost. Both traders and companies benefit from every successful merge.',
-    accent: 'from-violet-500 to-purple-500',
+    title: 'Measurable Cost Savings',
+    desc: 'Load sharing lowers per-ton transit costs for consignors while maximizing revenue yield for transport carriers.',
+    badge: 'Efficiency',
     span: '',
+    color: 'text-signal-amber',
+    bg: 'bg-signal-amber/10',
+    border: 'border-signal-amber/20',
   },
   {
     icon: Users,
-    title: 'Multi-Role Platform',
-    desc: 'Traders, transport companies, and admins each get a tailored experience and workflows built for their role.',
-    accent: 'from-orange-500 to-amber-500',
+    title: 'Role-Isolated Workstations',
+    desc: 'Consignors, transport carriers, and platform dispatchers each operate dedicated portals scoped to their role.',
+    badge: 'Access Control',
     span: '',
+    color: 'text-signal-purple',
+    bg: 'bg-signal-purple/10',
+    border: 'border-signal-purple/20',
   },
   {
     icon: Zap,
-    title: 'Instant Scheduling',
-    desc: 'Add a truck, define the route, submit. The entire scheduling workflow takes under two minutes.',
-    accent: 'from-pink-500 to-rose-500',
+    title: 'Rapid Fleet Onboarding',
+    desc: 'Register commercial vehicles, define payload headroom, and launch corridor schedules in under two minutes.',
+    badge: 'Dispatch',
     span: '',
+    color: 'text-signal-aqua',
+    bg: 'bg-signal-aqua/10',
+    border: 'border-signal-aqua/20',
   },
   {
     icon: BarChart3,
-    title: 'Admin Oversight',
-    desc: 'Full visibility into all companies, traders, trucks, routes, and merged schedules from a central dashboard.',
-    accent: 'from-emerald-500 to-cyan-500',
+    title: 'Central Dispatch Command',
+    desc: 'Comprehensive oversight into regional corridors, active manifests, FreeTruck pools, and algorithmic merge decisions.',
+    badge: 'Fleet Ops',
     span: 'md:col-span-2',
+    color: 'text-signal-emerald',
+    bg: 'bg-signal-emerald/10',
+    border: 'border-signal-emerald/20',
   },
 ];
 
 const Features = () => (
-  <section id="feature" className="py-28 px-6">
+  <section id="feature" className="py-24 px-6 border-t border-border">
     <div className="max-w-6xl mx-auto">
 
       {/* Heading */}
-      <div className="mb-16">
-        <span className="text-xs font-semibold text-emerald-400 tracking-widest uppercase">Platform Features</span>
-        <h2 className="text-4xl md:text-5xl font-bold text-white mt-3 leading-tight">
-          Everything you need.<br />
-          <span className="text-white/30">Nothing you don't.</span>
+      <div className="mb-14">
+        <span className="cx-eyebrow text-signal-aqua">Platform Capabilities</span>
+        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-semibold text-ink mt-3 leading-tight tracking-tight">
+          Engineered for logistics excellence.<br />
+          <span className="text-ink-subtle">Precision dispatch at nationwide scale.</span>
         </h2>
       </div>
 
       {/* Bento grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {features.map(({ icon: Icon, title, desc, accent, span }) => (
+        {features.map(({ icon: Icon, title, desc, badge, span, color, bg, border }) => (
           <div
             key={title}
-            className={`group relative p-6 rounded-2xl bg-white/3 border border-white/5 hover:border-white/10 hover:bg-white/5 transition-all duration-300 overflow-hidden ${span}`}
+            className={`group relative p-6 rounded-xl bg-surface/80 border border-border hover:border-border-strong hover:bg-surface-elevated/80 transition-all duration-200 flex flex-col justify-between shadow-subtle-card ${span}`}
           >
-            {/* Glow on hover */}
-            <div className={`absolute -top-10 -right-10 w-40 h-40 bg-gradient-to-br ${accent} opacity-0 group-hover:opacity-5 rounded-full blur-2xl transition-opacity duration-500`} />
-
-            <div className={`inline-flex w-11 h-11 rounded-xl bg-gradient-to-br ${accent} items-center justify-center mb-5 shadow-lg`}>
-              <Icon className="h-5 w-5 text-white" />
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <div className={`w-10 h-10 rounded-lg ${bg} border ${border} flex items-center justify-center ${color} shrink-0`}>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <span className="font-mono text-[10px] uppercase tracking-wider text-ink-subtle px-2 py-0.5 rounded border border-border bg-surface-subtle">
+                  {badge}
+                </span>
+              </div>
+              <h3 className="text-ink font-semibold text-base mb-2 group-hover:text-signal-aqua transition-colors">
+                {title}
+              </h3>
+              <p className="text-ink-muted text-xs sm:text-sm leading-relaxed">
+                {desc}
+              </p>
             </div>
-            <h3 className="text-white font-semibold text-lg mb-2">{title}</h3>
-            <p className="text-white/40 text-sm leading-relaxed">{desc}</p>
           </div>
         ))}
       </div>

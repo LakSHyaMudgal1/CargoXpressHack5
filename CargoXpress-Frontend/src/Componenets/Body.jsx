@@ -1,30 +1,44 @@
 import { useEffect } from 'react';
 import Navbar from './Navbar';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import FooterSec from './Footer';
 import ParticleBackground from './ParticleBackground';
 import axios from 'axios';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { addUser } from '../utils/userSlice';
 import { BASE_URL } from '../utils/constants';
+import AppShell from '../components/shell/AppShell';
 
 const Body = () => {
   const dispatch = useDispatch();
+  const user = useSelector((store) => store.user);
+  const location = useLocation();
 
   useEffect(() => {
     const fetchUser = async () => {
       try {
         const res = await axios.get(BASE_URL + '/me', { withCredentials: true });
         dispatch(addUser(res.data));
-      } catch (err) {
+      } catch {
         // Not logged in — leave store as null
       }
     };
     fetchUser();
-  }, []);
+  }, [dispatch]);
+
+  const isLandingPage = location.pathname === '/';
+
+  // If user is authenticated and navigating an operational dashboard route, wrap in AppShell
+  if (user && !isLandingPage) {
+    return (
+      <AppShell>
+        <Outlet />
+      </AppShell>
+    );
+  }
 
   return (
-    <div className="relative min-h-screen bg-gray-950">
+    <div className="relative min-h-screen bg-canvas text-ink">
       {/* Particle canvas — fixed, behind everything */}
       <ParticleBackground />
 

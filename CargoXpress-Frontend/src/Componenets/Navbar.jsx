@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { BASE_URL } from '../utils/constants';
 import { removeUser } from '../utils/userSlice';
 import axios from 'axios';
-import { Truck, LayoutDashboard, PackagePlus, Route, Menu, X, LogOut, User } from 'lucide-react';
+import { Truck, LayoutDashboard, PackagePlus, Route, Menu, X, LogOut, User, GitMerge, CalendarClock } from 'lucide-react';
 
 const Navbar = () => {
   const user = useSelector((store) => store.user);
@@ -38,7 +38,7 @@ const Navbar = () => {
 
   return (
     <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-      scrolled ? 'bg-gray-950/95 backdrop-blur-xl shadow-lg shadow-black/20 border-b border-white/5' : 'bg-transparent'
+      scrolled ? 'bg-canvas/90 backdrop-blur-xl shadow-lg shadow-black/30 border-b border-border' : 'bg-transparent'
     }`}>
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
 
@@ -77,6 +77,11 @@ const Navbar = () => {
             )}
             {isCompany && (
               <>
+                <Link to="/company">
+                  <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-all">
+                    <LayoutDashboard className="h-4 w-4" /> Dashboard
+                  </button>
+                </Link>
                 <Link to="/truck">
                   <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-all">
                     <Truck className="h-4 w-4" /> Add Truck
@@ -90,11 +95,18 @@ const Navbar = () => {
               </>
             )}
             {isTrader && (
-              <Link to="/traderRequest">
-                <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-all">
-                  <PackagePlus className="h-4 w-4" /> Request Delivery
-                </button>
-              </Link>
+              <>
+                <Link to="/trader">
+                  <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-all">
+                    <LayoutDashboard className="h-4 w-4" /> Dashboard
+                  </button>
+                </Link>
+                <Link to="/traderRequest">
+                  <button className="flex items-center gap-1.5 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-all">
+                    <PackagePlus className="h-4 w-4" /> Request Delivery
+                  </button>
+                </Link>
+              </>
             )}
 
             {/* Avatar */}
@@ -105,29 +117,45 @@ const Navbar = () => {
                 </div>
                 <span className="text-sm text-white/80 hidden lg:block max-w-[100px] truncate">{user.name}</span>
               </div>
-              <ul tabIndex={0} className="dropdown-content menu bg-gray-900 border border-white/10 rounded-xl shadow-2xl shadow-black/40 w-52 p-2 mt-2">
-                <li className="px-3 py-2 text-xs text-white/30 font-medium truncate">{user.emailId}</li>
-                <div className="border-t border-white/5 my-1" />
-                <li><Link to="/profile" className="text-white/70 hover:text-white hover:bg-white/5 rounded-lg flex gap-2"><User className="h-4 w-4"/>Profile</Link></li>
-                {isCompany && <li><Link to="/truck" className="text-white/70 hover:text-white hover:bg-white/5 rounded-lg flex gap-2"><Truck className="h-4 w-4"/>Add Truck</Link></li>}
-                {isTrader  && <li><Link to="/traderRequest" className="text-white/70 hover:text-white hover:bg-white/5 rounded-lg flex gap-2"><PackagePlus className="h-4 w-4"/>Request Delivery</Link></li>}
-                {isAdmin   && <li><Link to="/admin" className="text-white/70 hover:text-white hover:bg-white/5 rounded-lg flex gap-2"><LayoutDashboard className="h-4 w-4"/>Admin Dashboard</Link></li>}
-                <div className="border-t border-white/5 my-1" />
-                <li><button onClick={HandleLogout} className="text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg w-full text-left flex gap-2 px-3 py-2 text-sm"><LogOut className="h-4 w-4"/>Logout</button></li>
+              <ul tabIndex={0} className="dropdown-content menu bg-surface border border-border rounded-xl shadow-2xl shadow-black/60 w-52 p-2 mt-2">
+                <li className="px-3 py-2 text-xs text-ink-subtle font-medium truncate">{user.emailId}</li>
+                <div className="border-t border-border/60 my-1" />
+                <li><Link to="/profile" className="text-ink-secondary hover:text-ink hover:bg-white/5 rounded-lg flex gap-2"><User className="h-4 w-4"/>Profile</Link></li>
+                {isCompany && (
+                  <>
+                    <li><Link to="/truck" className="text-ink-secondary hover:text-ink hover:bg-white/5 rounded-lg flex gap-2"><Truck className="h-4 w-4"/>Fleet & Trucks</Link></li>
+                    <li><Link to="/route" className="text-ink-secondary hover:text-ink hover:bg-white/5 rounded-lg flex gap-2"><Route className="h-4 w-4"/>Add Route</Link></li>
+                  </>
+                )}
+                {isTrader  && (
+                  <>
+                    <li><Link to="/trader" className="text-ink-secondary hover:text-ink hover:bg-white/5 rounded-lg flex gap-2"><LayoutDashboard className="h-4 w-4"/>Consignments</Link></li>
+                    <li><Link to="/traderRequest" className="text-ink-secondary hover:text-ink hover:bg-white/5 rounded-lg flex gap-2"><PackagePlus className="h-4 w-4"/>Request Delivery</Link></li>
+                  </>
+                )}
+                {isAdmin   && (
+                  <>
+                    <li><Link to="/admin" className="text-ink-secondary hover:text-ink hover:bg-white/5 rounded-lg flex gap-2"><LayoutDashboard className="h-4 w-4"/>Admin Dashboard</Link></li>
+                    <li><Link to="/mergeable" className="text-ink-secondary hover:text-ink hover:bg-white/5 rounded-lg flex gap-2"><GitMerge className="h-4 w-4"/>Route Optimization</Link></li>
+                    <li><Link to="/mergedSchedule" className="text-ink-secondary hover:text-ink hover:bg-white/5 rounded-lg flex gap-2"><CalendarClock className="h-4 w-4"/>Consolidated Manifests</Link></li>
+                  </>
+                )}
+                <div className="border-t border-border/60 my-1" />
+                <li><button onClick={HandleLogout} className="text-signal-coral hover:text-signal-coral/80 hover:bg-signal-coral/10 rounded-lg w-full text-left flex gap-2 px-3 py-2 text-sm"><LogOut className="h-4 w-4"/>Logout</button></li>
               </ul>
             </div>
           </div>
         )}
 
         {/* Mobile hamburger */}
-        <button className="md:hidden text-white/70 hover:text-white" onClick={() => setMobileOpen(p => !p)}>
+        <button className="md:hidden text-ink-muted hover:text-ink" onClick={() => setMobileOpen(p => !p)}>
           {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </div>
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <div className="md:hidden bg-gray-950/98 border-t border-white/5 px-6 py-4 space-y-2">
+        <div className="md:hidden bg-surface border-t border-border px-6 py-4 space-y-2">
           {!user && (
             <>
               {[['about','About'],['feature','Features'],['contact','Contact']].map(([id,label]) => (
@@ -140,9 +168,13 @@ const Navbar = () => {
           )}
           {user && (
             <>
-              {isAdmin   && <Link to="/admin"        onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Dashboard</Link>}
-              {isCompany && <Link to="/truck"        onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Add Truck</Link>}
+              {isAdmin   && <Link to="/admin"        onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Admin Dashboard</Link>}
+              {isCompany && <Link to="/company"      onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Fleet Dashboard</Link>}
+              {isCompany && <Link to="/truck"        onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Fleet & Trucks</Link>}
               {isCompany && <Link to="/route"        onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Add Route</Link>}
+              {isAdmin   && <Link to="/mergeable" onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Route Optimization</Link>}
+              {isAdmin   && <Link to="/mergedSchedule" onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Consolidated Manifests</Link>}
+              {isTrader  && <Link to="/trader"       onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Consignments Dashboard</Link>}
               {isTrader  && <Link to="/traderRequest"onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Request Delivery</Link>}
               <Link to="/profile" onClick={() => setMobileOpen(false)} className="block py-2 text-white/60 text-sm">Profile</Link>
               <button onClick={HandleLogout} className="block py-2 text-red-400 text-sm">Logout</button>

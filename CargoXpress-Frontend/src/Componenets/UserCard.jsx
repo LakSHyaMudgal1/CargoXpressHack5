@@ -1,56 +1,89 @@
-import React from "react";
-import { MdEmail, MdLocationOn } from "react-icons/md";
-import { FaIdCard } from "react-icons/fa";
-import { BiUser } from "react-icons/bi";
+import { Mail, MapPin, Hash, Building2, ShieldCheck } from "lucide-react";
+import Badge from "../components/ui/Badge";
 
 const UserProfileCard = ({ user }) => {
   const { name, emailId, photoUrl, address, registrationNumber, aadharNumber } = user;
   const isTrader = aadharNumber !== undefined;
 
   return (
-    <div className="flex-1 min-w-0">
-      <div className="p-6 rounded-2xl bg-white/3 border border-white/5 hover:border-white/10 hover:bg-white/5 transition-all">
-        {/* Profile Photo */}
-        <div className="flex justify-center mb-6">
-          <div className="w-24 h-24 rounded-full border-2 border-emerald-500/30 overflow-hidden bg-white/5">
+    <div className="rounded-lg bg-surface border border-border overflow-hidden shadow-subtle-card">
+      {/* Top Banner & Avatar */}
+      <div className="h-16 bg-surface-elevated border-b border-border/60 relative">
+        <div className="absolute -bottom-8 left-6">
+          <div className="w-16 h-16 rounded-lg border-2 border-border-strong overflow-hidden bg-surface-base shadow-sm">
             <img
               src={photoUrl || "https://cdn-icons-png.flaticon.com/256/149/149071.png"}
-              alt={`${name}'s profile photo`}
+              alt={name ? `${name}'s profile photo` : "User profile photo"}
               className="w-full h-full object-cover"
+              onError={(e) => {
+                e.target.src = "https://cdn-icons-png.flaticon.com/256/149/149071.png";
+              }}
             />
           </div>
         </div>
+      </div>
 
-        {/* Name */}
-        <h2 className="text-xl font-bold text-white text-center mb-1">{name}</h2>
-        <p className="text-xs font-semibold text-emerald-400 tracking-widest uppercase text-center mb-6">
-          {isTrader ? "Trader" : "Transport Company"}
-        </p>
+      <div className="pt-10 p-5 space-y-4">
+        {/* Name & Role */}
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h3 className="text-base font-semibold text-ink leading-tight">
+              {name || "Account User"}
+            </h3>
+            <span className="text-[11px] font-mono text-ink-subtle block mt-0.5">
+              {isTrader ? "Commodity Consignor" : "Commercial Transport Carrier"}
+            </span>
+          </div>
+          <Badge variant={isTrader ? "emerald" : "aqua"} size="sm" dot>
+            {isTrader ? "Trader" : "Carrier"}
+          </Badge>
+        </div>
 
-        {/* Details */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-white/3 border border-white/5">
-            <MdEmail className="text-lg text-emerald-400 flex-shrink-0" aria-hidden="true" />
-            <span className="text-white/60 text-sm truncate">{emailId}</span>
+        {/* Details Table */}
+        <div className="space-y-2 pt-2 border-t border-border/60 text-xs">
+          <div className="flex items-center gap-2.5 text-ink-muted">
+            <Mail className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
+            <span className="font-mono text-xs text-ink truncate" title={emailId}>
+              {emailId || "—"}
+            </span>
           </div>
 
           {isTrader ? (
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-white/3 border border-white/5">
-              <FaIdCard className="text-lg text-emerald-400 flex-shrink-0" aria-hidden="true" />
-              <span className="text-white/60 text-sm">{aadharNumber}</span>
+            <div className="flex items-center gap-2.5 text-ink-muted">
+              <Hash className="w-3.5 h-3.5 text-signal-emerald shrink-0" />
+              <span className="font-mono text-xs text-ink">
+                UIDAI: {aadharNumber ? `****-****-${String(aadharNumber).slice(-4)}` : "—"}
+              </span>
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-white/3 border border-white/5">
-                <MdLocationOn className="text-lg text-emerald-400 flex-shrink-0" aria-hidden="true" />
-                <span className="text-white/60 text-sm">{address}</span>
-              </div>
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-white/3 border border-white/5">
-                <FaIdCard className="text-lg text-emerald-400 flex-shrink-0" aria-hidden="true" />
-                <span className="text-white/60 text-sm">{registrationNumber}</span>
-              </div>
+              {address && (
+                <div className="flex items-center gap-2.5 text-ink-muted">
+                  <MapPin className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
+                  <span className="text-xs text-ink truncate" title={address}>
+                    {address}
+                  </span>
+                </div>
+              )}
+              {registrationNumber && (
+                <div className="flex items-center gap-2.5 text-ink-muted">
+                  <Building2 className="w-3.5 h-3.5 text-signal-aqua shrink-0" />
+                  <span className="font-mono text-xs text-ink">
+                    Reg: {registrationNumber}
+                  </span>
+                </div>
+              )}
             </>
           )}
+        </div>
+
+        {/* Verification Footer */}
+        <div className="pt-3 border-t border-border/40 flex items-center justify-between text-[11px] text-ink-subtle">
+          <span className="flex items-center gap-1.5 text-signal-emerald">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            Enterprise Verified
+          </span>
+          <span className="font-mono text-[10px] uppercase">Active Session</span>
         </div>
       </div>
     </div>

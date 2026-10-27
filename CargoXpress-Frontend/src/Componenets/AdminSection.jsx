@@ -1,57 +1,102 @@
 import React from 'react';
-import { Calendar, CalendarClock, GitMerge } from 'lucide-react';
+import { GitMerge, CalendarClock, Boxes, ArrowUpRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import Badge from '../components/ui/Badge';
 
+/**
+ * CargoXpress Admin Action Tiles
+ * Inspired by CE Growth Partners: numbered stages (01, 02, 03), hairline borders, arrow CTAs.
+ */
 const AdminSection = () => {
+  const actions = [
+    {
+      step: '01',
+      title: 'Mergeable Trucks',
+      description: 'Inspect overlapping routes and consolidated capacities. Approve mergers or keep trucks autonomous.',
+      href: '/mergeable',
+      icon: GitMerge,
+      badge: 'AI Merge Engine',
+      badgeVariant: 'aqua',
+      color: 'text-signal-aqua',
+      bg: 'bg-signal-aqua/10',
+      border: 'border-signal-aqua/20',
+    },
+    {
+      step: '02',
+      title: 'Approved Schedules',
+      description: 'Review finalized multi-stop merged schedules, consolidated manifests, and real-time dispatch statuses.',
+      href: '/mergedSchedule',
+      icon: CalendarClock,
+      badge: 'Active Dispatches',
+      badgeVariant: 'emerald',
+      color: 'text-signal-emerald',
+      bg: 'bg-signal-emerald/10',
+      border: 'border-signal-emerald/20',
+    },
+    {
+      step: '03',
+      title: 'Trader Merge Pool',
+      description: 'Match consignor cargo requests with available truck capacity along compatible transit corridors.',
+      href: '/mergeableTraders',
+      icon: Boxes,
+      badge: 'Load Matching',
+      badgeVariant: 'purple',
+      color: 'text-purple-400',
+      bg: 'bg-purple-500/10',
+      border: 'border-purple-500/20',
+    },
+  ];
+
   return (
-    <div className="bg-gray-950 py-10 px-6">
-      <div className="max-w-5xl mx-auto">
-        <p className="text-xs font-semibold text-emerald-400 tracking-widest uppercase text-center mb-2">Admin Controls</p>
-        <h2 className="text-2xl font-bold text-white text-center mb-8">Review & Optimize Routes</h2>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="cx-eyebrow text-signal-aqua">
+          Algorithmic Optimization
+        </p>
+        <span className="text-xs font-mono text-ink-subtle">
+          3 Engines Active
+        </span>
+      </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {/* Mergeable Schedule */}
-          <Link to="/mergeable" className="block group">
-            <div className="p-6 rounded-2xl bg-white/3 border border-white/5 hover:border-white/10 hover:bg-white/5 transition-all cursor-pointer h-full">
-              <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 mb-4 group-hover:bg-emerald-500/15 transition-colors">
-                <Calendar className="w-6 h-6 text-emerald-400" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {actions.map((act) => (
+          <Link
+            key={act.step}
+            to={act.href}
+            className="group relative p-6 rounded-xl bg-surface/90 border border-border hover:border-border-strong hover:bg-surface-elevated/80 transition-all duration-200 flex flex-col justify-between shadow-subtle-card overflow-hidden"
+          >
+            {/* Top row: step number + icon + badge */}
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <span className="font-mono text-xs font-bold text-ink-subtle/80 tracking-widest">
+                  {act.step}
+                </span>
+                <Badge variant={act.badgeVariant} size="sm" className="font-mono text-[10px] uppercase">
+                  {act.badge}
+                </Badge>
               </div>
-              <h3 className="text-white font-semibold text-lg mb-1">Mergeable Trucks</h3>
-              <p className="text-white/40 text-sm">Review overlapping routes. Accept to merge or reject to dispatch separately</p>
-              <div className="mt-4 text-xs text-emerald-400 font-medium flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                Open →
+
+              <div className="flex items-center gap-3 mb-2.5">
+                <div className={`w-9 h-9 rounded-lg ${act.bg} border ${act.border} flex items-center justify-center ${act.color} shrink-0 group-hover:scale-105 transition-transform`}>
+                  <act.icon className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-semibold text-ink group-hover:text-signal-aqua transition-colors tracking-tight">
+                  {act.title}
+                </h3>
               </div>
+
+              <p className="text-xs text-ink-muted leading-relaxed">
+                {act.description}
+              </p>
+            </div>
+
+            {/* Bottom link CTA */}
+            <div className="mt-5 pt-3 border-t border-border/40 flex items-center justify-between text-xs font-medium text-ink-subtle group-hover:text-signal-aqua transition-colors">
+              <span>Launch Engine</span>
+              <ArrowUpRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             </div>
           </Link>
-
-          {/* Merged Schedules */}
-          <Link to="/mergedSchedule" className="block group">
-            <div className="p-6 rounded-2xl bg-white/3 border border-white/5 hover:border-white/10 hover:bg-white/5 transition-all cursor-pointer h-full">
-              <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 mb-4 group-hover:bg-emerald-500/15 transition-colors">
-                <CalendarClock className="w-6 h-6 text-emerald-400" />
-              </div>
-              <h3 className="text-white font-semibold text-lg mb-1">Approved Merged Routes</h3>
-              <p className="text-white/40 text-sm">View final merged routes approved by admin, ready for dispatch</p>
-              <div className="mt-4 text-xs text-emerald-400 font-medium flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                Open →
-              </div>
-            </div>
-          </Link>
-
-          {/* Mergeable for Traders */}
-          <Link to="/mergeableTraders" className="block group">
-            <div className="p-6 rounded-2xl bg-white/3 border border-white/5 hover:border-white/10 hover:bg-white/5 transition-all cursor-pointer h-full">
-              <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 mb-4 group-hover:bg-emerald-500/15 transition-colors">
-                <GitMerge className="w-6 h-6 text-emerald-400" />
-              </div>
-              <h3 className="text-white font-semibold text-lg mb-1">Mergeable Traders</h3>
-              <p className="text-white/40 text-sm">Review trader requests. Accept to merge with trucks or reject</p>
-              <div className="mt-4 text-xs text-emerald-400 font-medium flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                Open →
-              </div>
-            </div>
-          </Link>
-        </div>
+        ))}
       </div>
     </div>
   );

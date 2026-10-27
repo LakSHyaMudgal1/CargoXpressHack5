@@ -1,45 +1,79 @@
-import React from "react";
-import { Building2, Hash, MapPin, Mail } from "lucide-react";
+import React from 'react';
+import { Building2, Hash, MapPin, Mail } from 'lucide-react';
+import Badge from '../components/ui/Badge';
 
+/**
+ * CargoXpress Carrier Card
+ * Clean hairline borders, tabular registration number, and clear contact points.
+ */
 const CompanyCard = ({ imageUrl, name, registrationNo, address, email }) => {
   return (
-    <div className="rounded-2xl bg-white/3 border border-white/5 hover:border-white/10 hover:bg-white/5 transition-all overflow-hidden">
-      <div className="relative w-full h-44 group">
-        <img
-          src={imageUrl || "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80"}
-          alt={`${name} office`}
-          className="w-full h-full object-cover opacity-70 group-hover:opacity-90 transition-opacity duration-300"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/40 to-transparent" />
+    <div className="group rounded-xl bg-surface/90 border border-border hover:border-border-strong hover:bg-surface-elevated/80 transition-all duration-200 overflow-hidden flex flex-col justify-between shadow-subtle-card">
+      <div>
+        {/* Visual Banner */}
+        <div className="relative w-full h-36 overflow-hidden bg-surface-subtle">
+          <img
+            src={imageUrl || 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80'}
+            alt={`${name} facility`}
+            className="w-full h-full object-cover opacity-60 group-hover:opacity-85 group-hover:scale-105 transition-all duration-300"
+            onError={(e) => {
+              e.target.src = 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&q=80';
+            }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/40 to-transparent" />
+
+          {/* Carrier Badge */}
+          <div className="absolute top-3 left-3">
+            <Badge variant="aqua" size="sm" className="font-mono text-[10px] uppercase tracking-wider backdrop-blur-md">
+              Carrier Fleet
+            </Badge>
+          </div>
+        </div>
+
+        {/* Content Details */}
+        <div className="p-5 flex flex-col gap-3">
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="text-base font-semibold text-ink group-hover:text-signal-aqua transition-colors truncate">
+              {name}
+            </h3>
+            <Building2 className="w-4 h-4 text-ink-subtle shrink-0 mt-0.5" />
+          </div>
+
+          <div className="space-y-2 text-xs text-ink-muted">
+            {/* Registration Number */}
+            <div className="flex items-center gap-2">
+              <Hash className="w-3.5 h-3.5 text-signal-aqua/70 shrink-0" />
+              <span className="font-mono tabular-nums text-ink-secondary truncate">
+                {registrationNo || 'REG-UNSPECIFIED'}
+              </span>
+            </div>
+
+            {/* Address */}
+            {address && (
+              <div className="flex items-start gap-2">
+                <MapPin className="w-3.5 h-3.5 text-ink-subtle shrink-0 mt-0.5" />
+                <span className="line-clamp-2 text-ink-subtle">
+                  {address}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Building2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-          <h3 className="text-base font-semibold text-white truncate">{name}</h3>
-        </div>
-
-        <div className="space-y-2.5 text-sm">
-          <div className="flex items-center text-white/40 hover:text-white/70 transition-colors">
-            <Hash className="w-4 h-4 mr-3 text-emerald-400/60 flex-shrink-0" />
-            <span className="truncate">{registrationNo}</span>
-          </div>
-
-          <div className="flex items-start text-white/40 hover:text-white/70 transition-colors">
-            <MapPin className="w-4 h-4 mr-3 mt-0.5 text-emerald-400/60 flex-shrink-0" />
-            <span className="line-clamp-2">{address}</span>
-          </div>
-
-          <div className="flex items-center">
-            <Mail className="w-4 h-4 mr-3 text-emerald-400/60 flex-shrink-0" />
-            <a
-              href={`mailto:${email}`}
-              className="text-emerald-400 hover:text-emerald-300 transition-colors hover:underline truncate"
-            >
-              {email}
-            </a>
-          </div>
-        </div>
+      {/* Footer Contact */}
+      <div className="p-4 border-t border-border/60 bg-surface-subtle/40 flex items-center justify-between text-xs">
+        <a
+          href={`mailto:${email}`}
+          className="text-signal-aqua hover:underline flex items-center gap-1.5 truncate max-w-[200px]"
+          title={email}
+        >
+          <Mail className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">{email}</span>
+        </a>
+        <span className="text-[10px] font-mono uppercase text-ink-subtle">
+          Verified
+        </span>
       </div>
     </div>
   );

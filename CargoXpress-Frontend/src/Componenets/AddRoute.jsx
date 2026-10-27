@@ -1,211 +1,327 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { useSelector } from "react-redux";
 import { BASE_URL } from "../utils/constants";
-import { useLocation, useNavigate } from "react-router-dom";
-import { MapPin, CheckCircle2, Route } from "lucide-react";
+import { useLocation, useNavigate, Link } from "react-router-dom";
+import {
+  Route as RouteIcon,
+  Truck,
+  Plus,
+  X,
+  ArrowRight,
+  ShieldCheck
+} from "lucide-react";
+import PageHeader from "../components/ui/PageHeader";
+import Card from "../components/ui/Card";
+import Input from "../components/ui/Input";
+import Button from "../components/ui/Button";
+import Badge from "../components/ui/Badge";
+import { useToast } from "../components/ui/Toast";
 
 const AddRoute = () => {
+  const user = useSelector((store) => store.user);
+  const isAdmin = Boolean(user?.emailId?.endsWith("@cargoxpress.com"));
+
   const location = useLocation();
   const navigate = useNavigate();
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    if (user && isAdmin) {
+      showToast("neutral", "Access Restricted", "Route scheduling is managed directly by transport carriers.");
+      navigate("/admin", { replace: true });
+    }
+  }, [user, isAdmin, navigate, showToast]);
 
   const fromTruck = location.state || {};
-  const truckCapacity    = fromTruck.totalCapacity  || null;
-  const truckCurrentLoad = fromTruck.currentLoad    || [];
-  const truckRemaining   = fromTruck.remainingLoad  || [];
-  const truckStopLabels  = fromTruck.stops          || [];
+  const truckCapacity = fromTruck.totalCapacity || null;
+  const truckCurrentLoad = fromTruck.currentLoad || [];
+  const truckRemaining = fromTruck.remainingLoad || [];
+  const truckStopLabels = fromTruck.stops || [];
 
-  const [uistops, setUiStops] = useState(["Stop-1"]);
   const [licensePlate, setLicensePlate] = useState(fromTruck.licensePlate ?? "");
   const [source, setSource] = useState("");
   const [destination, setDestination] = useState("");
-  const [stops, setStops] = useState([]);
+  const [stops, setStops] = useState([""]);
   const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const addStop = () => {
-    if (uistops.length < 10) {
-      setUiStops([...uistops, `Stop-${uistops.length + 1}`]);
+    if (stops.length < 10) {
       setStops([...stops, ""]);
     }
   };
 
-  const updateStops = (index, value) => {
+  const removeStop = (index) => {
+    setStops(stops.filter((_, i) => i !== index));
+  };
+
+  const updateStop = (index, value) => {
     const updated = [...stops];
     updated[index] = value;
     setStops(updated);
   };
 
-  const handleAddRoute = async () => {
+  const handleAddRoute = async (e) => {
+    e?.preventDefault();
+    if (!licensePlate.trim() || !source.trim() || !destination.trim()) {
+      setError("License plate, origin source, and destination are required.");
+      return;
+    }
+
+    const cleanStops = stops.map((s) => s.trim()).filter(Boolean);
+
     try {
+      setLoading(true);
       setError("");
-      setSuccessMessage("");
-      const res = await axios.post(
+      await axios.post(
         BASE_URL + "/scheduleDelivery/addroute",
-        { licensePlate, source, destination, stops },
+        {
+          licensePlate: licensePlate.trim().toUpperCase(),
+          source: source.trim(),
+          destination: destination.trim(),
+          stops: cleanStops,
+        },
         { withCredentials: true }
       );
-      if (res.status === 200 || res.status === 201) {
-        navigate('/');
-      }
+
+      showToast(
+        "success",
+        "Route Scheduled",
+        `Corridor ${source} → ${destination} established for vehicle ${licensePlate.toUpperCase()}.`
+      );
+
+      navigate("/truck");
     } catch (err) {
-      const msg = err.response?.data?.message || err.response?.data || "Something went wrong";
+      console.error("Add route error:", err);
+      const msg = err.response?.data?.message || err.response?.data || err.message || "Failed to schedule route.";
       setError(typeof msg === "string" ? msg : JSON.stringify(msg));
+    } finally {
+      setLoading(false);
     }
   };
 
+  if (user && isAdmin) {
+    return null;
+  }
+
   return (
-    <div id="route" className="flex justify-center items-center min-h-screen p-6">
-      <div className="w-full max-w-lg">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 mb-4">
-            <Route className="w-7 h-7 text-emerald-400" />
-          </div>
-          <p className="text-xs font-semibold text-emerald-400 tracking-widest uppercase mb-2">Route Planning</p>
-          <h1 className="text-3xl font-bold text-white">Add Route</h1>
-          <p className="text-white/40 mt-1 text-sm">Define the delivery route for your truck</p>
+    <div className="space-y-8 animate-in fade-in duration-300 max-w-5xl mx-auto">
+      {/* 1. Page Header */}
+      <PageHeader
+        eyebrow="Fleet Operations"
+        title="Schedule Delivery Route"
+        description="Establish origin-to-destination transport corridors and ordered transit waypoints to enable algorithmic load consolidation."
+        badge={<Badge variant="aqua" dot>Route Planner</Badge>}
+        breadcrumbs={[
+          { label: "Fleet", href: "/truck" },
+          { label: "Add Route" },
+        ]}
+      />
+
+      {error && (
+        <div className="p-3.5 rounded-lg bg-signal-coral/10 border border-signal-coral/20 text-signal-coral text-xs">
+          {error}
         </div>
+      )}
 
-        <div className="p-8 rounded-2xl bg-white/3 border border-white/5 space-y-5">
-          {/* Capacity summary panel */}
-          {truckCapacity && (
-            <div className="rounded-xl bg-white/3 border border-white/8 p-4">
-              <p className="text-white/60 text-sm font-medium mb-3">
-                Truck: <span className="text-white">{fromTruck.licensePlate}</span>
-                <span className="ml-3 text-white/30">·</span>
-                <span className="ml-3 text-white/60">Capacity: <span className="text-emerald-400">{truckCapacity} kg</span></span>
-              </p>
-              <div className="space-y-2">
-                {truckStopLabels.map((label, i) => {
-                  const remaining = truckRemaining[i] ?? (truckCapacity - (truckCurrentLoad[i] || 0));
-                  const pct = Math.max(0, Math.round((remaining / truckCapacity) * 100));
-                  return (
-                    <div key={i} className="flex items-center gap-3">
-                      <span className="text-white/30 text-xs w-16">{label}</span>
-                      <div className="flex-1 bg-white/5 rounded-full h-1.5">
-                        <div
-                          className={`h-1.5 rounded-full transition-all ${pct > 40 ? "bg-emerald-500" : pct > 15 ? "bg-yellow-500" : "bg-red-500"}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-white/40 w-20 text-right">{remaining} kg free</span>
-                    </div>
-                  );
-                })}
+      {/* 2. Main Workspace: Form & Live Preview Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column: Route Form */}
+        <div className="lg:col-span-7">
+          <Card className="p-6 space-y-5">
+            <div className="flex items-center gap-2 pb-3 border-b border-border/60">
+              <RouteIcon className="w-5 h-5 text-signal-aqua" />
+              <h3 className="text-sm font-bold text-ink">Corridor Parameters</h3>
+            </div>
+
+            <form onSubmit={handleAddRoute} className="space-y-4 text-xs">
+              {/* Vehicle License Plate */}
+              <div>
+                <label className="text-[11px] font-mono uppercase tracking-wider text-ink-muted font-semibold block mb-1.5">
+                  Assigned Vehicle Plate *
+                </label>
+                <Input
+                  placeholder="e.g. MH12AB1234"
+                  value={licensePlate}
+                  onChange={(e) => setLicensePlate(e.target.value.toUpperCase())}
+                  required
+                />
               </div>
-            </div>
-          )}
 
-          {/* License Plate */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-sm font-medium text-white/60">License Plate</label>
-              {fromTruck.licensePlate && (
-                <span className="text-xs text-emerald-400">auto-filled</span>
-              )}
-            </div>
-            <input
-              type="text"
-              placeholder="Enter license plate"
-              value={licensePlate}
-              onChange={(e) => setLicensePlate(e.target.value)}
-              readOnly={!!fromTruck.licensePlate}
-              className={`w-full border text-white placeholder-white/20 rounded-xl py-3 px-4 focus:outline-none focus:border-emerald-500/50 transition-all ${fromTruck.licensePlate ? "bg-white/3 border-white/5 cursor-default text-white/50" : "bg-white/5 border-white/8"}`}
-            />
-          </div>
+              {/* Origin & Destination */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-mono uppercase tracking-wider text-ink-muted font-semibold block mb-1.5">
+                    Origin City (Source) *
+                  </label>
+                  <Input
+                    placeholder="e.g. Mumbai"
+                    value={source}
+                    onChange={(e) => setSource(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-mono uppercase tracking-wider text-ink-muted font-semibold block mb-1.5">
+                    Destination City *
+                  </label>
+                  <Input
+                    placeholder="e.g. Delhi"
+                    value={destination}
+                    onChange={(e) => setDestination(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
 
-          {/* Source */}
-          <div>
-            <label className="text-sm font-medium text-white/60 block mb-1.5">Source</label>
-            <input
-              type="text"
-              placeholder="Starting city / location"
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              className="w-full bg-white/5 border border-white/8 text-white placeholder-white/20 rounded-xl py-3 px-4 focus:outline-none focus:border-emerald-500/50 transition-all"
-            />
-          </div>
+              {/* Intermediate Stops */}
+              <div className="pt-2 border-t border-border/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-[11px] font-mono uppercase tracking-wider text-ink-muted font-semibold block">
+                      Intermediate Transit Stops
+                    </label>
+                    <span className="text-[10px] text-ink-subtle">
+                      Stops between origin and destination in planned travel order.
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={addStop}
+                    className="text-xs h-7 text-signal-aqua"
+                    leftIcon={Plus}
+                  >
+                    Add Waypoint
+                  </Button>
+                </div>
 
-          {/* Destination */}
-          <div>
-            <label className="text-sm font-medium text-white/60 block mb-1.5">Destination</label>
-            <input
-              type="text"
-              placeholder="End city / location"
-              value={destination}
-              onChange={(e) => setDestination(e.target.value)}
-              className="w-full bg-white/5 border border-white/8 text-white placeholder-white/20 rounded-xl py-3 px-4 focus:outline-none focus:border-emerald-500/50 transition-all"
-            />
-          </div>
-
-          {/* Stops */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <label className="text-xs font-semibold text-emerald-400 tracking-widest uppercase">Intermediate Stops</label>
-              {truckStopLabels.length > 0 && (
-                <span className="text-xs text-white/30">
-                  Truck has <span className="text-emerald-400 font-semibold">{truckStopLabels.length}</span> stop{truckStopLabels.length !== 1 ? "s" : ""}
-                </span>
-              )}
-            </div>
-            <div className="space-y-3">
-              {uistops.map((uistop, index) => {
-                const stopRemaining = truckRemaining[index] ?? null;
-                const stopLoad      = truckCurrentLoad[index] ?? null;
-                const hasCapInfo    = truckCapacity && stopRemaining !== null;
-                return (
-                  <div key={index} className="p-4 rounded-xl bg-white/3 border border-white/5">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex-shrink-0">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                      </div>
-                      <span className="text-white/60 text-sm font-medium">{uistop}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        placeholder="Stop name"
-                        value={stops[index] || ""}
-                        onChange={(e) => updateStops(index, e.target.value)}
-                        className="flex-1 bg-white/5 border border-white/8 text-white placeholder-white/20 rounded-xl py-2.5 px-3 focus:outline-none focus:border-emerald-500/50 transition-all text-sm"
+                <div className="space-y-2">
+                  {stops.map((stopVal, sIdx) => (
+                    <div key={sIdx} className="flex items-center gap-2">
+                      <span className="font-mono text-[11px] text-ink-subtle w-20">Stop {sIdx + 1}:</span>
+                      <Input
+                        placeholder="e.g. Surat, Ahmedabad"
+                        value={stopVal}
+                        onChange={(e) => updateStop(sIdx, e.target.value)}
+                        className="flex-1"
                       />
-                      {index === uistops.length - 1 && uistops.length < 10 && (
+                      {stops.length > 1 && (
                         <button
-                          onClick={addStop}
-                          className="h-10 w-10 flex-shrink-0 flex items-center justify-center rounded-xl bg-white/5 border border-white/8 text-white/60 text-lg font-bold hover:bg-white/8 hover:border-white/15 hover:text-white transition-all"
+                          type="button"
+                          onClick={() => removeStop(sIdx)}
+                          className="p-1.5 text-ink-subtle hover:text-signal-coral rounded-md"
+                          aria-label="Remove waypoint"
                         >
-                          +
+                          <X className="w-4 h-4" />
                         </button>
                       )}
                     </div>
-                    {hasCapInfo && (
-                      <p className="text-xs mt-2 text-white/30">
-                        Capacity: <span className="text-white">{truckCapacity} kg</span>
-                        <span className="mx-1">·</span>
-                        Used: <span className="text-yellow-400">{stopLoad} kg</span>
-                        <span className="mx-1">·</span>
-                        Free: <span className="text-emerald-400">{stopRemaining} kg</span>
-                      </p>
-                    )}
+                  ))}
+                </div>
+              </div>
+
+              {/* Submit */}
+              <div className="pt-4 border-t border-border/60 flex items-center justify-end gap-3">
+                <Link to="/truck">
+                  <Button variant="secondary" type="button">
+                    Cancel
+                  </Button>
+                </Link>
+                <Button variant="primary" type="submit" isLoading={loading} rightIcon={ArrowRight}>
+                  Save & Establish Route
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+
+        {/* Right Column: Live Itinerary Preview & Vehicle Context */}
+        <div className="lg:col-span-5 space-y-4">
+          {/* Capacity summary panel if passed from registration */}
+          {truckCapacity && (
+            <Card className="p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-signal-aqua" />
+                  <span className="font-mono font-bold text-xs text-ink">{fromTruck.licensePlate}</span>
+                </div>
+                <Badge variant="aqua" size="sm">
+                  {truckCapacity.toLocaleString()} kg Rated
+                </Badge>
+              </div>
+
+              {truckStopLabels.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-border/60 text-xs">
+                  <span className="text-[10px] uppercase font-mono text-ink-subtle block">
+                    Planned Stop Capacities
+                  </span>
+                  {truckStopLabels.map((lbl, i) => {
+                    const rem = truckRemaining[i] ?? Math.max(0, truckCapacity - (truckCurrentLoad[i] || 0));
+                    return (
+                      <div key={i} className="flex items-center justify-between font-mono text-[11px]">
+                        <span className="text-ink-muted">{lbl}</span>
+                        <span className="text-signal-emerald font-semibold">{rem.toLocaleString()} kg free</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* Ordered Itinerary Preview */}
+          <Card className="p-5 space-y-4">
+            <span className="text-[10px] uppercase font-mono tracking-wider text-ink-subtle font-semibold block">
+              Corridor Timeline Preview
+            </span>
+
+            <div className="relative pl-6 space-y-4 border-l-2 border-border/60 ml-2 text-xs">
+              {/* Origin */}
+              <div className="relative">
+                <div className="absolute -left-[31px] top-0 w-6 h-6 rounded-full bg-signal-aqua/20 border-2 border-signal-aqua flex items-center justify-center font-mono text-[10px] font-bold text-signal-aqua">
+                  A
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono text-ink-subtle block uppercase">Origin (Pickup)</span>
+                  <p className="font-bold text-sm text-ink">{source.trim() || "Pending Origin"}</p>
+                </div>
+              </div>
+
+              {/* Stops */}
+              {stops.map((s, idx) => (
+                <div key={idx} className="relative">
+                  <div className="absolute -left-[31px] top-0 w-6 h-6 rounded-full bg-surface-elevated border-2 border-border flex items-center justify-center font-mono text-[10px] font-bold text-ink-subtle">
+                    {idx + 1}
                   </div>
-                );
-              })}
+                  <div>
+                    <span className="text-[10px] font-mono text-ink-subtle block">Waypoint #{idx + 1}</span>
+                    <p className="font-medium text-ink">{s.trim() || "Unspecified Stop"}</p>
+                  </div>
+                </div>
+              ))}
+
+              {/* Destination */}
+              <div className="relative">
+                <div className="absolute -left-[31px] top-0 w-6 h-6 rounded-full bg-signal-emerald/20 border-2 border-signal-emerald flex items-center justify-center font-mono text-[10px] font-bold text-signal-emerald">
+                  B
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono text-ink-subtle block uppercase">Final Delivery</span>
+                  <p className="font-bold text-sm text-ink">{destination.trim() || "Pending Destination"}</p>
+                </div>
+              </div>
             </div>
-          </div>
 
-          {successMessage && (
-            <p className="text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3">{successMessage}</p>
-          )}
-          {error && (
-            <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">{error}</p>
-          )}
-
-          <button
-            className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl py-3 px-4 transition-all shadow-lg shadow-emerald-500/20 hover:-translate-y-0.5 mt-2"
-            onClick={handleAddRoute}
-          >
-            Add Route
-          </button>
+            <div className="p-3 rounded-lg bg-surface-elevated border border-border/60 flex items-start gap-2.5 text-xs text-ink-muted">
+              <ShieldCheck className="w-4 h-4 text-signal-aqua shrink-0 mt-0.5" />
+              <p className="text-[11px] leading-relaxed">
+                Once saved, the optimization engine continuously scans this corridor for load overlap candidates.
+              </p>
+            </div>
+          </Card>
         </div>
       </div>
     </div>

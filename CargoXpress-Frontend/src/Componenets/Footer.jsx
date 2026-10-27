@@ -1,11 +1,11 @@
-import { Twitter, Youtube, Github, Truck, Phone, Mail, MapPin } from 'lucide-react';
+import { Twitter, Youtube, Github, Phone, Mail, MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const FooterSec = () => {
   const scroll = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
 
   return (
-    <footer className="bg-gray-950 border-t border-white/5 pt-16 pb-8 px-6">
+    <footer className="bg-surface-base border-t border-border pt-16 pb-8 px-6">
       <div className="max-w-7xl mx-auto">
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">

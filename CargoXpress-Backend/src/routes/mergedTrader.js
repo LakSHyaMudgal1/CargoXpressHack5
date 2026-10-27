@@ -5,6 +5,7 @@ const Route = require("../models/route");
 const TraderRequest = require("../models/traderRequest");
 const MergeableTrader = require("../models/mergeableTrader");
 const { adminAuth } = require("../middlewares/auth");
+const { calculateRequiredCapacity } = require("../utils/capacityCalculation");
 
 // ─── GET /mergedTrader ────────────────────────────────────────────────────────
 // Returns pending trader requests matched with a truck, excluding already processed ones.
@@ -81,9 +82,24 @@ traderRouter.get("/mergedTrader", adminAuth, async (req, res) => {
         const traderMergedData = [];
 
         for (const request of pending) {
+            let reqRequiredCap = 0;
+            try {
+                reqRequiredCap = request.requiredCapacity || calculateRequiredCapacity(request.load);
+            } catch (err) {
+                console.warn(`Skipping trader request ${request._id} with invalid load:`, err.message);
+                continue;
+            }
+
             // Find a truck whose route covers trader's source -> destination in forward order with capacity
             const matchIdx = availableTrucks.findIndex(e => {
                 if (usedTruckIds.has(e.truck._id.toString())) return false;
+
+                // Overall physical truck capacity validation using required capacity:
+                // Do not reject a truck merely because stop-level requirements were summed,
+                // but ensure truck physically fits the required capacity.
+                if (e.totalCapacity < reqRequiredCap) {
+                    return false;
+                }
 
                 const sIdx = e.stops.indexOf(request.source);
                 const dIdx = e.stops.indexOf(request.destination);
@@ -97,8 +113,10 @@ traderRouter.get("/mergedTrader", adminAuth, async (req, res) => {
                     if (idx === -1 || idx <= lastStopIdx || idx > dIdx) return false;
                     lastStopIdx = idx;
 
-                    // Validate segment capacity at each stop
-                    const addLoad = request.load[i] || 0;
+                    // Validate segment capacity at each stop:
+                    const addLoad = (Array.isArray(request.load) && request.load[i] !== undefined)
+                        ? request.load[i]
+                        : reqRequiredCap;
                     const curLoad = e.currentLoad[idx] || 0;
                     if (curLoad + addLoad > e.totalCapacity) {
                         return false;
@@ -123,6 +141,7 @@ traderRouter.get("/mergedTrader", adminAuth, async (req, res) => {
                     truckRemainingLoad: matched.remainingLoad,
                     truckStops:        matched.stops,
                     load:              request.load,
+                    requiredCapacity:  reqRequiredCap,
                     source:            request.source,
                     destination:       request.destination,
                     stops:             request.stops,
@@ -156,6 +175,8 @@ traderRouter.post("/acceptTrader", adminAuth, async (req, res) => {
             return res.status(400).json({ error: "Trader request already merged" });
         }
 
+        const reqRequiredCap = calculateRequiredCapacity(load);
+
         // ── Update the truck's load ──────────────────────────────────────────
         const truck = await Truck.findById(truckId);
         if (truck) {
@@ -170,13 +191,19 @@ traderRouter.post("/acceptTrader", adminAuth, async (req, res) => {
             const baseCurrentLoad = activeCarrierSchedule ? (activeCarrierSchedule.finalCurrentLoad || []) : (truck.currentLoad || []);
             const capacity = activeCarrierSchedule ? (activeCarrierSchedule.totalCapacity || truck.totalCapacity) : truck.totalCapacity;
 
+            if (capacity < reqRequiredCap) {
+                return res.status(400).json({
+                    error: `Required capacity ${reqRequiredCap} kg exceeds truck capacity ${capacity} kg.`
+                });
+            }
+
             const newCurrentLoad = [...baseCurrentLoad];
 
             // Segment-by-segment capacity validation
             for (let i = 0; i < stops.length; i++) {
                 const stopName = stops[i];
                 const truckIdx = truckStops.indexOf(stopName);
-                const addLoad = load[i] || 0;
+                const addLoad = (Array.isArray(load) && load[i] !== undefined) ? load[i] : reqRequiredCap;
 
                 if (truckIdx !== -1) {
                     const proposed = (newCurrentLoad[truckIdx] || 0) + addLoad;
@@ -202,6 +229,7 @@ traderRouter.post("/acceptTrader", adminAuth, async (req, res) => {
             traderRequestId,
             truckId,
             load,
+            requiredCapacity: reqRequiredCap,
             source,
             destination,
             stops,
@@ -310,8 +338,16 @@ traderRouter.post("/mergeAllTraders", adminAuth, async (req, res) => {
             try {
                 if (await MergeableTrader.findOne({ traderRequestId: request._id.toString() })) continue;
 
+                let reqCap = 0;
+                try {
+                    reqCap = request.requiredCapacity || calculateRequiredCapacity(request.load);
+                } catch (_) {
+                    continue;
+                }
+
                 const matchIdx = availableTrucks.findIndex(e => {
                     if (usedTruckIds.has(e.truck._id.toString())) return false;
+                    if (e.totalCapacity < reqCap) return false;
                     return e.route.stops.includes(request.source) &&
                            e.route.stops.includes(request.destination);
                 });
@@ -326,8 +362,11 @@ traderRouter.post("/mergeAllTraders", adminAuth, async (req, res) => {
                     for (let i = 0; i < request.stops.length; i++) {
                         const idx = upd.stops.indexOf(request.stops[i]);
                         if (idx !== -1) {
-                            upd.currentLoad[idx]   += (request.load[i] || 0);
-                            upd.remainingLoad[idx]  = Math.max(upd.remainingLoad[idx] - (request.load[i] || 0), 0);
+                            const addLoad = (Array.isArray(request.load) && request.load[i] !== undefined)
+                                ? request.load[i]
+                                : reqCap;
+                            upd.currentLoad[idx]   += addLoad;
+                            upd.remainingLoad[idx]  = Math.max(upd.remainingLoad[idx] - addLoad, 0);
                         }
                     }
 
@@ -336,6 +375,7 @@ traderRouter.post("/mergeAllTraders", adminAuth, async (req, res) => {
                         truckId:    tid,
                         licensePlate: matched.truck.licensePlate,
                         load:        request.load,
+                        requiredCapacity: reqCap,
                         source:      request.source,
                         destination: request.destination,
                         stops:       request.stops,

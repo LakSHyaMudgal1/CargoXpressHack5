@@ -460,7 +460,10 @@ async function generateMergeablePairs() {
         await MergeablePair.insertMany(newPairsToSave);
     }
 
-    return await MergeablePair.find().sort({ createdAt: -1 });
+    return await MergeablePair.find()
+        .populate('truckOneId')
+        .populate('truckTwoId')
+        .sort({ createdAt: -1 });
 }
 
 /**

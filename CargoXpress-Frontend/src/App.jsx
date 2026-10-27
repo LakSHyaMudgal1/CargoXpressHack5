@@ -5,6 +5,8 @@ import Home from "./Componenets/Home";
 import Login from "./Componenets/Login";
 import appStore from "./utils/appStore";
 import AdminDashboard from "./Componenets/AdminDashboard";
+import CompanyDashboard from "./Componenets/CompanyDashboard";
+import TraderDashboard from "./Componenets/TraderDashboard";
 import MergedSchedule from "./Componenets/MergedSchedule";
 import MergeableSchedule from "./Componenets/MergeableSchedule";
 import Truck from "./Componenets/Truck";
@@ -12,38 +14,41 @@ import AddRoute from "./Componenets/AddRoute";
 import Profile from "./Componenets/Profile";
 import AddTraderRequest from "./Componenets/AddTraderRequest";
 import TraderList from "./Componenets/TraderList";
-import TraderCard from "./Componenets/TraderCard"
+import TraderCard from "./Componenets/TraderCard";
 import MergeableTraders from "./Componenets/MergableTraders";
 
-
+import { ToastProvider } from "./components/ui/Toast";
 
 function App() {
   return (
     <Provider store={appStore}>
-    <BrowserRouter basename="/">
-    <Routes>
-      {/* Standalone — no navbar/footer */}
-      <Route path="/login" element={<Login/>}/>
+      <ToastProvider>
+        <BrowserRouter basename="/">
+          <Routes>
+            {/* Standalone — no navbar/footer */}
+            <Route path="/login" element={<Login/>}/>
 
-      {/* All other routes get the Body layout */}
-      <Route path="/" element={<Body/>}>
-        <Route path="/" element={<Home/>}/>
-        <Route path="/truck" element={<Truck/>}/>
-        <Route path="/route" element={<AddRoute/>}/>
-        <Route path="/admin" element={<AdminDashboard/>}/>
-        <Route path="/mergedSchedule" element={<MergedSchedule/>}/>
-        <Route path="/mergeable" element={<MergeableSchedule/>}/>
-        <Route path="/profile" element={<Profile/>}/>
-        <Route path="/traderRequest" element={<AddTraderRequest/>}/>
-        <Route path="/traderList" element={<TraderList/>}/>
-        <Route path="/traderCard" element={<TraderCard/>}/>
-        <Route path="/mergeableTraders" element={<MergeableTraders/>}/>
-      </Route>
-    </Routes>
-  </BrowserRouter>
-  </Provider>
-
-  )
+            {/* All other routes get the Body layout */}
+            <Route path="/" element={<Body/>}>
+              <Route path="/" element={<Home/>}/>
+              <Route path="/admin" element={<AdminDashboard/>}/>
+              <Route path="/company" element={<CompanyDashboard/>}/>
+              <Route path="/trader" element={<TraderDashboard/>}/>
+              <Route path="/truck" element={<Truck/>}/>
+              <Route path="/route" element={<AddRoute/>}/>
+              <Route path="/mergedSchedule" element={<MergedSchedule/>}/>
+              <Route path="/mergeable" element={<MergeableSchedule/>}/>
+              <Route path="/profile" element={<Profile/>}/>
+              <Route path="/traderRequest" element={<AddTraderRequest/>}/>
+              <Route path="/traderList" element={<TraderList/>}/>
+              <Route path="/traderCard" element={<TraderCard/>}/>
+              <Route path="/mergeableTraders" element={<MergeableTraders/>}/>
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </ToastProvider>
+    </Provider>
+  );
 }
 
-export default App
+export default App;
