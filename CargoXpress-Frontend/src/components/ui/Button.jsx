@@ -1,23 +1,27 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Check } from 'lucide-react';
+import Tooltip from './Tooltip';
 
 /**
  * CargoXpress Button Component
  * Inspired by CE Growth Partners restrained, purposeful interactive design.
+ * Features tactile feedback, loading state, success state, and accessible tooltips.
  */
 export const Button = React.forwardRef(({
   children,
   variant = 'primary',
   size = 'md',
   isLoading = false,
+  isSuccess = false,
   disabled = false,
+  disabledReason = '',
   leftIcon: LeftIcon,
   rightIcon: RightIcon,
   className = '',
   type = 'button',
   ...props
 }, ref) => {
-  const baseStyles = 'relative inline-flex items-center justify-center font-medium transition-all duration-150 select-none disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-aqua/80 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas active:scale-[0.98]';
+  const baseStyles = 'relative inline-flex items-center justify-center font-medium transition-all duration-150 select-none disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-aqua/80 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas active:scale-[0.98] motion-reduce:active:scale-100 motion-reduce:transition-none';
 
   const variants = {
     // Primary: Semantic theme action token with guaranteed AAA contrast
@@ -46,28 +50,46 @@ export const Button = React.forwardRef(({
     icon: 'p-1.5 rounded-md aspect-square min-h-[34px] min-w-[34px]',
   };
 
-  return (
+  const buttonElement = (
     <button
       ref={ref}
       type={type}
       disabled={disabled || isLoading}
-      className={`${baseStyles} ${variants[variant] || variants.primary} ${sizes[size] || sizes.md} ${className}`}
+      aria-busy={isLoading}
+      className={`${baseStyles} ${variants[variant] || variants.primary} ${sizes[size] || sizes.md} ${
+        isSuccess ? '!bg-signal-emerald !text-white' : ''
+      } ${className}`}
       {...props}
     >
       {isLoading ? (
         <>
-          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+          <Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden="true" />
+          <span>{children}</span>
+        </>
+      ) : isSuccess ? (
+        <>
+          <Check className="w-4 h-4 shrink-0 animate-cx-pop text-white" aria-hidden="true" />
           <span>{children}</span>
         </>
       ) : (
         <>
-          {LeftIcon && <LeftIcon className="w-4 h-4 shrink-0" />}
+          {LeftIcon && <LeftIcon className="w-4 h-4 shrink-0" aria-hidden="true" />}
           <span>{children}</span>
-          {RightIcon && <RightIcon className="w-4 h-4 shrink-0 transition-transform group-hover:translate-x-0.5" />}
+          {RightIcon && <RightIcon className="w-4 h-4 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />}
         </>
       )}
     </button>
   );
+
+  if (disabled && disabledReason) {
+    return (
+      <Tooltip content={disabledReason} placement="top">
+        {buttonElement}
+      </Tooltip>
+    );
+  }
+
+  return buttonElement;
 });
 
 Button.displayName = 'Button';

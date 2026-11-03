@@ -59,9 +59,11 @@ export const Button: React.FC<ButtonProps> = ({
 
   return (
     <TouchableOpacity
-      activeOpacity={0.8}
+      activeOpacity={0.7}
       onPress={onPress}
       disabled={disabled || loading}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
       style={getContainerStyles()}
     >
       {loading ? (
@@ -106,14 +108,17 @@ const styles = StyleSheet.create({
   small: {
     paddingVertical: 8,
     paddingHorizontal: 12,
+    minHeight: 36,
   },
   medium: {
     paddingVertical: 14,
     paddingHorizontal: 20,
+    minHeight: 48,
   },
   large: {
     paddingVertical: 16,
     paddingHorizontal: 24,
+    minHeight: 54,
   },
   text: {
     fontWeight: '600',

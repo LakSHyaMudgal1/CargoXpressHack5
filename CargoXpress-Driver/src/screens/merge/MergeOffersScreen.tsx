@@ -22,6 +22,7 @@ import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
+import { DriverBottomNav } from '../../components/DriverBottomNav';
 import { MergeOffer } from '../../types/merge';
 
 const PRESET_REJECTION_REASONS = [
@@ -487,6 +488,12 @@ export const MergeOffersScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Persistent Bottom Navigation Dock */}
+      <DriverBottomNav
+        currentScreen="MergeOffers"
+        pendingOffersCount={offers.length}
+      />
     </SafeAreaView>
   );
 };

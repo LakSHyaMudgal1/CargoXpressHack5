@@ -18,6 +18,13 @@ npm install
 npm run dev
 ```
 
+### Run Driver Mobile App:
+```bash
+cd CargoXpress-Driver
+npm install
+npx expo start
+```
+
 ## Login Credentials
 
 ### Transport Company
@@ -32,4 +39,10 @@ npm run dev
 - **Email ID:** sanchita@gmail.com  
 - **Password:** Sanchita@123  
 
- Get started with CargoXpress and optimize your logistics efficiently!
+### Driver (CargoXpress-Driver Cockpit App)
+- **Email ID:** driver@cargoxpress.com  
+- **Mobile Number:** +919876543210  
+- **Password:** Driver@123  
+- **Assigned Vehicle:** MH-01-AA-1111 (FastTrack Logistics)  
+
+Get started with CargoXpress and optimize your logistics efficiently!

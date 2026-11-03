@@ -1,117 +1,137 @@
+import React from 'react';
 import { Link } from 'react-router-dom';
-import { useSelector } from 'react-redux';
-import { LogIn, Truck, MapPin, GitMerge, Rocket } from 'lucide-react';
+import {
+  Truck,
+  GitMerge,
+  ShieldCheck,
+  Smartphone,
+  ArrowRight,
+  CheckCircle2
+} from 'lucide-react';
+import Badge from '../components/ui/Badge';
+import Button from '../components/ui/Button';
 
-const steps = [
-  {
-    icon: LogIn,
-    label: 'Create Account',
-    desc: 'Sign up as a Trader or Transport Company in under a minute.',
-    tag: 'Step 1',
-  },
-  {
-    icon: Truck,
-    label: 'Register Your Truck',
-    desc: 'Add your truck with total capacity and current load at each stop.',
-    tag: 'Step 2',
-  },
-  {
-    icon: MapPin,
-    label: 'Schedule a Route',
-    desc: 'Define source, destination and all intermediate stops for the truck.',
-    tag: 'Step 3',
-  },
-  {
-    icon: GitMerge,
-    label: 'Admin Merges Cargo',
-    desc: 'The platform intelligently pairs compatible trucks and trader requests.',
-    tag: 'Step 4',
-  },
-  {
-    icon: Rocket,
-    label: 'Dispatch & Save',
-    desc: 'Optimised trucks are dispatched — cutting costs and reducing emissions.',
-    tag: 'Step 5',
-  },
-];
-
+/**
+ * How It Works: 4-Stage Operational Lifecycle
+ * Verified capabilities directly matching the CargoXpress algorithm & models.
+ */
 const About = () => {
-  const user = useSelector((store) => store.user);
-  const isAdmin   = user && user.emailId?.endsWith('@cargoxpress.com');
-  const isTrader  = user && !isAdmin && user.aadharNumber !== undefined;
-  const isCompany = user && !isAdmin && user.registrationNumber !== undefined;
+
+  const steps = [
+    {
+      step: '01',
+      title: 'Register Fleet & Establish Itineraries',
+      desc: 'Transport carriers register commercial vehicles with rated payload capacity (kg) and map origin-to-destination corridors with intermediate drop-off waypoints. Shippers log required consignment loads.',
+      icon: Truck,
+      color: 'text-signal-aqua',
+      bg: 'bg-signal-aqua/10',
+      border: 'border-signal-aqua/20',
+      metric: 'Carrier Fleet Model',
+    },
+    {
+      step: '02',
+      title: 'Corridor Topology & Capacity Analysis',
+      desc: 'The optimization engine evaluates routes for topological subset compatibility. It continuously calculates segment headroom along every intermediate leg to ensure cumulative loads never exceed safety limits.',
+      icon: GitMerge,
+      color: 'text-signal-purple',
+      bg: 'bg-signal-purple/10',
+      border: 'border-signal-purple/20',
+      metric: 'Topological Subsequence Algorithm',
+    },
+    {
+      step: '03',
+      title: 'Dispatch Authorization & FreeTruck Pool',
+      desc: 'Platform dispatchers or drivers review the merge opportunity. Upon acceptance, the lead carrier schedule is consolidated, an authoritative audit record is logged to MergeDecisionLog, and the absorbed truck is recycled to the FreeTruck pool.',
+      icon: ShieldCheck,
+      color: 'text-signal-emerald',
+      bg: 'bg-signal-emerald/10',
+      border: 'border-signal-emerald/20',
+      metric: 'Audit-Verified Manifest Consolidation',
+    },
+    {
+      step: '04',
+      title: 'Driver Telematics & Secure Delivery POD',
+      desc: 'Assigned drivers execute the unified route through the mobile cockpit. Intermediate stops advance from scheduled to arrived to completed. Final cargo delivery requires a 6-digit recipient OTP handshake and photo evidence.',
+      icon: Smartphone,
+      color: 'text-signal-amber',
+      bg: 'bg-signal-amber/10',
+      border: 'border-signal-amber/20',
+      metric: 'Cryptographic Delivery Handshake',
+    },
+  ];
 
   return (
-    <section id="about" className="py-24 px-6 border-t border-border relative overflow-hidden">
-      <div className="max-w-6xl mx-auto relative z-10">
-        <div className="grid lg:grid-cols-2 gap-16 items-center">
+    <section id="how-it-works" className="py-24 px-6 border-t border-border relative overflow-hidden bg-surface-subtle/20 scroll-mt-20">
+      <div id="about" className="max-w-6xl mx-auto space-y-16">
+        {/* Section Header */}
+        <div className="max-w-3xl space-y-3">
+          <span className="cx-eyebrow text-signal-emerald">Operational Lifecycle</span>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-semibold text-ink tracking-tight leading-tight">
+            How freight consolidation works.
+          </h2>
+          <p className="text-xs sm:text-sm text-ink-muted leading-relaxed">
+            From vehicle registry to final recipient OTP handoff, each operational phase is algorithmically calculated, audited, and tracked across role-isolated portals.
+          </p>
+        </div>
 
-          {/* Left — copy */}
-          <div>
-            <span className="cx-eyebrow text-signal-emerald">Operational Flow</span>
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-semibold text-ink mt-3 mb-6 leading-tight tracking-tight">
-              From onboarding<br />
-              <span className="text-ink-subtle">to optimized dispatch in minutes.</span>
-            </h2>
-            <p className="text-ink-muted text-sm sm:text-base leading-relaxed mb-8 max-w-md">
-              CargoXpress streamlines freight logistics by matching commercial vehicle capacity headroom with verified shipper consignments along compatible regional transit corridors.
-            </p>
+        {/* 4 Process Grid Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {steps.map((st) => {
+            const Icon = st.icon;
+            return (
+              <div
+                key={st.step}
+                className="p-6 sm:p-8 rounded-2xl bg-surface/80 border border-border hover:border-border-strong hover:bg-surface-elevated/70 transition-all duration-200 space-y-5 shadow-subtle-card flex flex-col justify-between"
+              >
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs font-bold text-ink-subtle">
+                      STAGE {st.step}
+                    </span>
+                    <Badge variant="neutral" size="sm" className="font-mono text-[10px]">
+                      {st.metric}
+                    </Badge>
+                  </div>
 
-            {!user && (
-              <Link to="/login">
-                <button className="group inline-flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold rounded-lg transition-all shadow-subtle-card">
-                  Get Started Free
-                  <span className="group-hover:translate-x-0.5 transition-transform inline-block">→</span>
-                </button>
-              </Link>
-            )}
-            {isTrader && (
-              <Link to="/traderRequest">
-                <button className="group inline-flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold rounded-lg transition-all shadow-subtle-card">
-                  Request Delivery <span className="group-hover:translate-x-0.5 transition-transform">→</span>
-                </button>
-              </Link>
-            )}
-            {isCompany && (
-              <Link to="/truck">
-                <button className="group inline-flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold rounded-lg transition-all shadow-subtle-card">
-                  Manage Fleet <span className="group-hover:translate-x-0.5 transition-transform">→</span>
-                </button>
-              </Link>
-            )}
-            {isAdmin && (
-              <Link to="/admin">
-                <button className="group inline-flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold rounded-lg transition-all shadow-subtle-card">
-                  Dispatch Command <span className="group-hover:translate-x-0.5 transition-transform">→</span>
-                </button>
-              </Link>
-            )}
-          </div>
-
-          {/* Right — step list */}
-          <div className="space-y-0">
-            {steps.map((step, i) => {
-              const Icon = step.icon;
-              const isLast = i === steps.length - 1;
-              return (
-                <div key={i} className="flex gap-4 group">
-                  {/* connector column */}
-                  <div className="flex flex-col items-center">
-                    <div className="w-10 h-10 rounded-lg bg-surface-elevated border border-border flex items-center justify-center flex-shrink-0 group-hover:border-signal-emerald transition-all shadow-sm">
-                      <Icon className="h-4 w-4 text-signal-emerald" />
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-lg ${st.bg} ${st.border} border flex items-center justify-center shrink-0`}>
+                      <Icon className={`w-4 h-4 ${st.color}`} />
                     </div>
-                    {!isLast && <div className="w-px flex-1 bg-border my-2" />}
+                    <h3 className="text-base sm:text-lg font-bold text-ink">
+                      {st.title}
+                    </h3>
                   </div>
-                  {/* content */}
-                  <div className="pb-8">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-signal-emerald/80 font-semibold">{step.tag}</span>
-                    <h3 className="text-ink font-semibold text-base mt-0.5 mb-1">{step.label}</h3>
-                    <p className="text-ink-muted text-xs sm:text-sm leading-relaxed">{step.desc}</p>
-                  </div>
+
+                  <p className="text-xs sm:text-sm text-ink-muted leading-relaxed">
+                    {st.desc}
+                  </p>
                 </div>
-              );
-            })}
+
+                <div className="pt-4 border-t border-border/40 flex items-center gap-2 text-[11px] font-mono text-ink-subtle">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-signal-emerald shrink-0" />
+                  <span>Verified Platform Capability</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Bottom CTA Banner */}
+        <div className="p-6 sm:p-8 rounded-2xl bg-surface-elevated border border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+          <div className="space-y-1">
+            <h4 className="text-base sm:text-lg font-bold text-ink">
+              Ready to eliminate empty vehicle mileage?
+            </h4>
+            <p className="text-xs sm:text-sm text-ink-muted">
+              Access the dispatch control center or onboard your commercial fleet in under two minutes.
+            </p>
           </div>
+
+          <Link to="/login">
+            <Button variant="primary" size="md" rightIcon={ArrowRight}>
+              Launch Platform
+            </Button>
+          </Link>
         </div>
       </div>
     </section>

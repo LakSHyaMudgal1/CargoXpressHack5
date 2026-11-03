@@ -10,7 +10,8 @@ import {
   RotateCcw,
   Building2,
   Users,
-  ChevronRight
+  ChevronRight,
+  SlidersHorizontal
 } from "lucide-react";
 import { BASE_URL } from "../utils/constants";
 import PageHeader from "../components/ui/PageHeader";
@@ -22,6 +23,10 @@ import { CardSkeleton } from "../components/ui/Skeleton";
 import EmptyState from "../components/ui/EmptyState";
 import ErrorPanel from "../components/ui/ErrorPanel";
 import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from "../components/ui/Table";
+import CorridorTimeline from "../components/ui/CorridorTimeline";
+import CapacityUtilizationChart from "../components/charts/CapacityUtilizationChart";
+import StatusDistributionChart from "../components/charts/StatusDistributionChart";
+import ActivityFeed from "../components/charts/ActivityFeed";
 
 const AdminDashboard = () => {
   const [fleetOverview, setFleetOverview] = useState(null);
@@ -30,7 +35,9 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState("corridors"); // "corridors" | "queue" | "freeTrucks" | "companies"
+  const [activeTab, setActiveTab] = useState("corridors"); // "corridors" | "queue" | "freeTrucks" | "companies" | "traders"
+  const [expandedCorridors, setExpandedCorridors] = useState({});
+  const [showAnalyticsDeck, setShowAnalyticsDeck] = useState(true);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -61,6 +68,13 @@ const AdminDashboard = () => {
     fetchDashboardData();
   }, []);
 
+  const toggleCorridorExpanded = (id) => {
+    setExpandedCorridors((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
+
   const metrics = fleetOverview?.metrics || {
     totalRegisteredTrucks: 0,
     activeTrucksCount: 0,
@@ -78,6 +92,62 @@ const AdminDashboard = () => {
   const pendingTraderRequests = fleetOverview?.pendingTraderRequests || [];
   const freeTrucks = fleetOverview?.freeTrucks || [];
   const recentDecisions = fleetOverview?.recentDecisions || [];
+
+  // Transform schedule utilization for CapacityUtilizationChart
+  const utilizationChartItems = scheduleUtilization.map((s) => ({
+    id: s.id,
+    label: s.carrierPlate,
+    subLabel: `${s.source} → ${s.destination}`,
+    peakLoad: s.peakLoad || 0,
+    totalCapacity: s.totalCapacity || 10000,
+    utilizationPct: s.utilizationPct || 0,
+    status: `${s.mergedTrucksCount || 0} Absorbed`,
+  }));
+
+  // Transform status breakdown for StatusDistributionChart
+  const statusSegments = [
+    {
+      label: "Active Consolidated Carriers",
+      count: metrics.activeConsolidatedSchedulesCount || 0,
+      color: "rgb(25, 232, 200)",
+      badgeVariant: "aqua",
+    },
+    {
+      label: "FreeTruck Pool Available",
+      count: metrics.freeTruckPoolCount || 0,
+      color: "rgb(16, 185, 129)",
+      badgeVariant: "emerald",
+    },
+    {
+      label: "Pending Algorithmic Merges",
+      count: metrics.pendingMergeOffersCount || 0,
+      color: "rgb(139, 92, 246)",
+      badgeVariant: "purple",
+    },
+    {
+      label: "Consignments In Queue",
+      count: metrics.pendingTraderRequestsCount || 0,
+      color: "rgb(245, 158, 11)",
+      badgeVariant: "amber",
+    },
+    {
+      label: "Delivery Exceptions",
+      count: metrics.delayedOrFailedDeliveries || 0,
+      color: "rgb(255, 75, 58)",
+      badgeVariant: "coral",
+    },
+  ];
+
+  // Transform recentDecisions for ActivityFeed
+  const activityFeedEvents = recentDecisions.slice(0, 5).map((d) => ({
+    id: d._id,
+    type: "merge_decision",
+    title: d.decision === "accepted" ? "Consolidated Manifest Authorized" : "Merge Pair Offer Rejected",
+    subtitle: `Lead Carrier: ${d.carrierLicensePlate} • Absorbed: ${d.absorbedLicensePlate}${d.reason ? ` (${d.reason})` : ""}`,
+    timestamp: d.decidedAt,
+    status: d.decision,
+    badgeVariant: d.decision === "accepted" ? "emerald" : "coral",
+  }));
 
   // Filter schedules
   const filteredSchedules = scheduleUtilization.filter((s) => {
@@ -127,15 +197,23 @@ const AdminDashboard = () => {
       {/* 1. Header with live status & operational dispatch shortcuts */}
       <PageHeader
         eyebrow="Central Dispatch Command"
-        title="Network Fleet Operations & Optimization"
+        title="Network Operations & Optimization Console"
         description="Monitor network capacity utilization, review algorithmic route consolidation queues, and manage platform vehicle registries."
         badge={<Badge variant="aqua" dot>Dispatch Active</Badge>}
         breadcrumbs={[
           { label: "Admin", href: "/admin" },
-          { label: "Dispatch Command" },
+          { label: "Dispatch Console" },
         ]}
         actions={
           <div className="flex items-center gap-2.5">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowAnalyticsDeck((v) => !v)}
+              leftIcon={SlidersHorizontal}
+            >
+              {showAnalyticsDeck ? "Hide Telemetry Deck" : "Show Telemetry Deck"}
+            </Button>
             <Button
               variant="secondary"
               size="sm"
@@ -143,7 +221,7 @@ const AdminDashboard = () => {
               isLoading={loading}
               leftIcon={RefreshCw}
             >
-              Refresh Data
+              Refresh
             </Button>
             <Link to="/mergeable">
               <Button variant="primary" size="sm" rightIcon={ArrowRight}>
@@ -163,7 +241,7 @@ const AdminDashboard = () => {
         />
       )}
 
-      {/* 2. Priority Decision Alert Banner (When algorithmic merge opportunities exist) */}
+      {/* 2. Priority Decision Alert Banner */}
       {metrics.pendingMergeOffersCount > 0 && (
         <div className="p-4 rounded-lg bg-surface-elevated border border-signal-aqua/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
           <div className="flex items-center gap-3">
@@ -226,7 +304,30 @@ const AdminDashboard = () => {
         />
       </div>
 
-      {/* 4. Authorized Operational Dispatch Shortcuts */}
+      {/* 4. Interactive Telemetry & Utilization Visualizations Deck */}
+      {showAnalyticsDeck && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <CapacityUtilizationChart
+              items={utilizationChartItems}
+              title="Corridor Fleet Capacity Utilization"
+              subtitle="Segment load relative to rated vehicle payload capacity across live corridors"
+              emptyText="No active consolidated schedules or capacity utilization data available."
+            />
+          </div>
+          <div>
+            <StatusDistributionChart
+              segments={statusSegments}
+              title="Network Fleet Distribution"
+              subtitle="Current operational lifecycle breakdown"
+              centerLabel="Events"
+              emptyText="No network events recorded."
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 5. Authorized Operational Dispatch Shortcuts */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Link
           to="/mergeable"
@@ -283,7 +384,7 @@ const AdminDashboard = () => {
         </Link>
       </div>
 
-      {/* 5. Workstation Tabs & High-Density Tables */}
+      {/* 6. Workstation Tabs & High-Density Tables */}
       <div className="space-y-4 pt-2 border-t border-border">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           {/* Tabs */}
@@ -299,7 +400,7 @@ const AdminDashboard = () => {
             >
               <CalendarClock className="w-3.5 h-3.5" />
               <span>Active Corridors</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/5 text-ink-subtle">
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface-subtle text-ink-subtle">
                 {scheduleUtilization.length}
               </span>
             </button>
@@ -315,7 +416,7 @@ const AdminDashboard = () => {
             >
               <Boxes className="w-3.5 h-3.5" />
               <span>Consignments Queue</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/5 text-ink-subtle">
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface-subtle text-ink-subtle">
                 {pendingTraderRequests.length}
               </span>
             </button>
@@ -331,7 +432,7 @@ const AdminDashboard = () => {
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>FreeTruck Pool</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/5 text-ink-subtle">
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface-subtle text-ink-subtle">
                 {freeTrucks.length}
               </span>
             </button>
@@ -347,7 +448,7 @@ const AdminDashboard = () => {
             >
               <Building2 className="w-3.5 h-3.5" />
               <span>Carriers</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/5 text-ink-subtle">
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface-subtle text-ink-subtle">
                 {companies.length}
               </span>
             </button>
@@ -363,7 +464,7 @@ const AdminDashboard = () => {
             >
               <Users className="w-3.5 h-3.5" />
               <span>Consignors</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/5 text-ink-subtle">
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface-subtle text-ink-subtle">
                 {traders.length}
               </span>
             </button>
@@ -394,57 +495,100 @@ const AdminDashboard = () => {
                     <TableHead>Stops</TableHead>
                     <TableHead>Capacity Utilization</TableHead>
                     <TableHead>Absorbed Trucks</TableHead>
-                    <TableHead align="right">Manifest</TableHead>
+                    <TableHead align="right">Actions</TableHead>
                   </tr>
                 </TableHeader>
                 <TableBody>
-                  {filteredSchedules.map((s) => (
-                    <TableRow key={s.id} hover>
-                      <TableCell>
-                        <span className="font-mono text-xs sm:text-sm font-semibold text-ink">
-                          {s.carrierPlate}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-xs font-mono font-medium text-ink">
-                          <span>{s.source}</span>
-                          <span className="text-ink-subtle mx-1.5">→</span>
-                          <span>{s.destination}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell isNumeric>
-                        <span className="font-mono text-xs text-ink-subtle">
-                          {s.stopsCount} stops
-                        </span>
-                      </TableCell>
-                      <TableCell isNumeric>
-                        <div className="flex flex-col gap-1 min-w-[130px]">
-                          <div className="flex items-center justify-between text-[11px] font-mono">
-                            <span className="text-ink-subtle">{s.peakLoad.toLocaleString()} kg</span>
-                            <span className="font-semibold text-ink">{s.utilizationPct}%</span>
-                          </div>
-                          <div className="w-full h-1.5 rounded-full bg-surface-elevated overflow-hidden border border-border">
-                            <div
-                              className="h-full rounded-full bg-signal-aqua"
-                              style={{ width: `${s.utilizationPct}%` }}
-                            />
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-mono text-xs text-signal-purple">
-                          {s.mergedTrucksCount} absorbed
-                        </span>
-                      </TableCell>
-                      <TableCell align="right">
-                        <Link to="/mergedSchedule">
-                          <Button variant="secondary" size="xs">
-                            View Manifest
-                          </Button>
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredSchedules.map((s) => {
+                    const isExpanded = Boolean(expandedCorridors[s.id]);
+                    return (
+                      <React.Fragment key={s.id}>
+                        <TableRow hover>
+                          <TableCell>
+                            <span className="font-mono text-xs sm:text-sm font-semibold text-ink">
+                              {s.carrierPlate}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-xs font-mono font-medium text-ink">
+                              <span>{s.source}</span>
+                              <span className="text-ink-subtle mx-1.5">→</span>
+                              <span>{s.destination}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell isNumeric>
+                            <span className="font-mono text-xs text-ink-subtle">
+                              {s.stopsCount} stops
+                            </span>
+                          </TableCell>
+                          <TableCell isNumeric>
+                            <div className="flex flex-col gap-1 min-w-[130px]">
+                              <div className="flex items-center justify-between text-[11px] font-mono">
+                                <span className="text-ink-subtle">{s.peakLoad.toLocaleString()} kg</span>
+                                <span className="font-semibold text-ink">{s.utilizationPct}%</span>
+                              </div>
+                              <div className="w-full h-1.5 rounded-full bg-surface-elevated overflow-hidden border border-border">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-300 ${
+                                    s.utilizationPct > 90
+                                      ? "bg-signal-coral"
+                                      : s.utilizationPct >= 65
+                                      ? "bg-signal-emerald"
+                                      : "bg-signal-aqua"
+                                  }`}
+                                  style={{ width: `${s.utilizationPct}%` }}
+                                />
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-mono text-xs text-signal-purple">
+                              {s.mergedTrucksCount} absorbed
+                            </span>
+                          </TableCell>
+                          <TableCell align="right">
+                            <div className="flex items-center justify-end gap-2">
+                              {s.stops && s.stops.length > 0 && (
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  onClick={() => toggleCorridorExpanded(s.id)}
+                                >
+                                  {isExpanded ? "Hide Legs" : "Inspect Legs"}
+                                </Button>
+                              )}
+                              <Link to="/mergedSchedule">
+                                <Button variant="secondary" size="xs">
+                                  Manifest
+                                </Button>
+                              </Link>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+
+                        {/* Expandable Corridor Route Timeline */}
+                        {isExpanded && s.stops && s.stops.length > 0 && (
+                          <TableRow className="bg-surface-elevated/40">
+                            <TableCell colSpan={6} className="py-4 px-6">
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between text-[11px] font-mono text-ink-muted">
+                                  <span>Segment Capacity Distribution for {s.carrierPlate}:</span>
+                                  <span>Rated: {s.totalCapacity?.toLocaleString() || 10000} kg</span>
+                                </div>
+                                <CorridorTimeline
+                                  stops={s.stops}
+                                  currentLoad={s.currentLoad || []}
+                                  totalCapacity={s.totalCapacity || 10000}
+                                  source={s.source}
+                                  destination={s.destination}
+                                />
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
             ) : (
@@ -688,48 +832,14 @@ const AdminDashboard = () => {
         )}
       </div>
 
-      {/* 6. Recent Merge Decisions History (Real MergeDecisionLog Data) */}
-      {recentDecisions.length > 0 && (
-        <div className="space-y-3 pt-4 border-t border-border">
-          <div className="flex items-center justify-between">
-            <span className="cx-eyebrow text-ink-muted">
-              Recent Algorithmic Dispatch Decisions
-            </span>
-            <span className="font-mono text-[11px] text-ink-subtle">
-              Audit Log ({recentDecisions.length})
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {recentDecisions.slice(0, 6).map((d) => (
-              <div
-                key={d._id}
-                className="p-3.5 rounded-lg bg-surface/70 border border-border flex items-start justify-between gap-3 text-xs"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-ink">
-                      {d.decision === "accepted" ? "Approved Merge" : "Rejected Offer"}
-                    </span>
-                    <Badge variant={d.decision === "accepted" ? "emerald" : "coral"} size="sm">
-                      {d.decision}
-                    </Badge>
-                  </div>
-                  <p className="text-[11px] font-mono text-ink-subtle">
-                    Carrier: <strong className="text-ink">{d.carrierLicensePlate}</strong> • Absorbed: {d.absorbedLicensePlate}
-                  </p>
-                  {d.reason && (
-                    <p className="text-[11px] text-ink-muted italic">
-                      &ldquo;{d.reason}&rdquo;
-                    </p>
-                  )}
-                </div>
-                <span className="font-mono text-[10px] text-ink-subtle shrink-0">
-                  {new Date(d.decidedAt).toLocaleTimeString()}
-                </span>
-              </div>
-            ))}
-          </div>
+      {/* 7. Real Recent Operational Activity Timeline */}
+      {activityFeedEvents.length > 0 && (
+        <div className="pt-2">
+          <ActivityFeed
+            events={activityFeedEvents}
+            title="Real-time Dispatch & Consolidation Stream"
+            subtitle="Authoritative audit logs from MergeDecisionLog"
+          />
         </div>
       )}
     </div>

@@ -49,8 +49,6 @@ const Truck = () => {
   const [currentLoad, setCurrentLoad] = useState([""]);
   const [formError, setFormError] = useState("");
   const [plateError, setPlateError] = useState("");
-  const [plateChecking, setPlateChecking] = useState(false);
-  const [plateExists, setPlateExists] = useState(false);
   const [registering, setRegistering] = useState(false);
 
   // Details Modal
@@ -86,29 +84,6 @@ const Truck = () => {
     }
   }, [user, isAdmin, navigate, fetchFleet, showToast]);
 
-  const handlePlateBlur = async () => {
-    if (!licensePlate.trim()) return;
-    setPlateChecking(true);
-    setPlateError("");
-    try {
-      const res = await axios.get(
-        BASE_URL + "/scheduleDelivery/checkplate?licensePlate=" + encodeURIComponent(licensePlate.trim().toUpperCase()),
-        { withCredentials: true }
-      );
-      if (res.data.exists) {
-        setPlateError("This license plate is already registered.");
-        setPlateExists(true);
-      } else {
-        setPlateError("");
-        setPlateExists(false);
-      }
-    } catch {
-      setPlateExists(false);
-    } finally {
-      setPlateChecking(false);
-    }
-  };
-
   const addStop = () => {
     if (stops.length < 10) {
       setStops([...stops, `Stop-${stops.length + 1}`]);
@@ -131,7 +106,6 @@ const Truck = () => {
 
   const handleAddTruck = async (e) => {
     e?.preventDefault();
-    if (plateExists) return;
     if (!licensePlate.trim()) {
       setPlateError("License plate is required.");
       return;
@@ -695,14 +669,10 @@ const Truck = () => {
                   setLicensePlate(e.target.value.toUpperCase());
                   setPlateError("");
                 }}
-                onBlur={handlePlateBlur}
                 error={plateError}
                 autoFocus
                 required
               />
-              {plateChecking && (
-                <span className="text-[10px] text-ink-subtle mt-1 block">Checking plate availability...</span>
-              )}
             </div>
 
             {/* Section 2: Rated Payload Capacity */}

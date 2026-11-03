@@ -1,9 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 
 /**
  * CargoXpress Accessible Modal / Dialog
- * Keyboard escape handling, body lock, smooth entrance.
+ * Keyboard escape handling, body lock, focus restoration, smooth entrance.
  */
 export const Modal = ({
   isOpen = false,
@@ -15,19 +15,57 @@ export const Modal = ({
   size = 'md',
   showClose = true,
 }) => {
+  const modalRef = useRef(null);
+  const previousActiveElement = useRef(null);
+
   useEffect(() => {
     if (!isOpen) return;
 
+    previousActiveElement.current = document.activeElement;
+
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onClose?.();
+      if (e.key === 'Escape') {
+        onClose?.();
+      } else if (e.key === 'Tab' && modalRef.current) {
+        // Trap focus inside modal
+        const focusables = modalRef.current.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusables.length === 0) return;
+
+        const firstElement = focusables[0];
+        const lastElement = focusables[focusables.length - 1];
+
+        if (e.shiftKey && document.activeElement === firstElement) {
+          lastElement.focus();
+          e.preventDefault();
+        } else if (!e.shiftKey && document.activeElement === lastElement) {
+          firstElement.focus();
+          e.preventDefault();
+        }
+      }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     document.body.style.overflow = 'hidden';
 
+    // Focus the first focusable element inside dialog
+    const timer = setTimeout(() => {
+      if (modalRef.current) {
+        const firstFocusable = modalRef.current.querySelector(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        firstFocusable?.focus();
+      }
+    }, 50);
+
     return () => {
+      clearTimeout(timer);
       document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = '';
+      if (previousActiveElement.current && typeof previousActiveElement.current.focus === 'function') {
+        previousActiveElement.current.focus();
+      }
     };
   }, [isOpen, onClose]);
 
@@ -48,14 +86,15 @@ export const Modal = ({
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-canvas/80 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-canvas/80 backdrop-blur-sm transition-opacity duration-200 motion-reduce:transition-none"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Modal Surface */}
       <div
-        className={`relative w-full ${sizes[size] || sizes.md} bg-surface-elevated border border-border-strong rounded-lg shadow-elevated-card overflow-hidden z-10 transition-all duration-200 transform scale-100 animate-in fade-in zoom-in-95`}
+        ref={modalRef}
+        className={`relative w-full ${sizes[size] || sizes.md} bg-surface-elevated border border-border-strong rounded-lg shadow-elevated-card overflow-hidden z-10 transition-all duration-200 transform scale-100 animate-in fade-in zoom-in-95 motion-reduce:transition-none motion-reduce:animate-none`}
       >
         {/* Header */}
         {(title || showClose) && (

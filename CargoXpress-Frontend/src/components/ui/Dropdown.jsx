@@ -45,13 +45,18 @@ export const Dropdown = ({
 
   return (
     <div className="relative inline-block text-left" ref={containerRef}>
-      <div onClick={() => setIsOpen((prev) => !prev)}>
+      <div
+        onClick={() => setIsOpen((prev) => !prev)}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+        className="cursor-pointer"
+      >
         {trigger}
       </div>
 
       {isOpen && (
         <div
-          className={`absolute top-full mt-1.5 w-56 rounded-lg bg-surface-elevated border border-border-strong shadow-elevated-card py-1 z-50 animate-in fade-in zoom-in-95 duration-100 ${
+          className={`absolute top-full mt-1.5 w-56 rounded-lg bg-surface-elevated border border-border-strong shadow-elevated-card py-1 z-50 animate-in fade-in zoom-in-95 duration-100 motion-reduce:transition-none motion-reduce:animate-none ${
             alignments[align] || alignments.right
           } ${className}`}
           role="menu"

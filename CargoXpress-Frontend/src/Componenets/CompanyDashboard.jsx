@@ -6,8 +6,7 @@ import {
   MapPin,
   Plus,
   RefreshCw,
-  UserCheck,
-  ChevronRight
+  UserCheck
 } from "lucide-react";
 import { BASE_URL } from "../utils/constants";
 import PageHeader from "../components/ui/PageHeader";
@@ -15,10 +14,12 @@ import StatCard from "../components/ui/StatCard";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
 import SearchInput from "../components/ui/SearchInput";
+import Modal from "../components/ui/Modal";
 import { CardSkeleton } from "../components/ui/Skeleton";
 import EmptyState from "../components/ui/EmptyState";
 import ErrorPanel from "../components/ui/ErrorPanel";
 import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from "../components/ui/Table";
+import CorridorTimeline from "../components/ui/CorridorTimeline";
 
 const CompanyDashboard = () => {
   const [fleetData, setFleetData] = useState(null);
@@ -26,6 +27,8 @@ const CompanyDashboard = () => {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTab, setFilterTab] = useState("all"); // "all" | "active" | "available" | "free"
+  const [selectedTruck, setSelectedTruck] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fetchFleetData = async () => {
     setLoading(true);
@@ -64,12 +67,10 @@ const CompanyDashboard = () => {
 
   // Filter trucks
   const filteredTrucks = trucks.filter((t) => {
-    // Tab filter
     if (filterTab === "active" && t.operationalStatus !== "active_assignment") return false;
     if (filterTab === "available" && t.operationalStatus !== "available_unassigned" && t.operationalStatus !== "available_in_pool") return false;
     if (filterTab === "free" && !t.isFreeInPool) return false;
 
-    // Search query
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     const plateMatch = t.licensePlate && t.licensePlate.toLowerCase().includes(q);
@@ -88,9 +89,9 @@ const CompanyDashboard = () => {
       case "active_assignment":
         return <Badge variant="aqua" size="sm" dot>Active on Trip</Badge>;
       case "available_unassigned":
-        return <Badge variant="emerald" size="sm">Available on Standby</Badge>;
+        return <Badge variant="emerald" size="sm">Available Standby</Badge>;
       case "assigned_awaiting_route":
-        return <Badge variant="amber" size="sm">Awaiting Route Plan</Badge>;
+        return <Badge variant="amber" size="sm">Awaiting Route</Badge>;
       default:
         return <Badge variant="neutral" size="sm">Registered</Badge>;
     }
@@ -98,17 +99,22 @@ const CompanyDashboard = () => {
 
   const remainingHeadroomKg = Math.max(0, stats.totalCapacityKg - stats.totalLoadedKg);
 
+  const handleInspectTruck = (truck) => {
+    setSelectedTruck(truck);
+    setIsModalOpen(true);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* 1. Page Header with Carrier Actions */}
       <PageHeader
         eyebrow="Carrier Operations Workstation"
-        title="Fleet Vehicles & Route Corridors"
-        description="Monitor your commercial vehicles, driver allocations, and payload capacity across regional corridors."
+        title="Fleet Command & Capacity Management"
+        description="Monitor commercial vehicles, driver allocations, and payload capacity across regional corridors."
         badge={<Badge variant="aqua" dot>Carrier Fleet Active</Badge>}
         breadcrumbs={[
           { label: "Carrier", href: "/company" },
-          { label: "Fleet Operations" },
+          { label: "Fleet Command" },
         ]}
         actions={
           <div className="flex items-center gap-2.5 flex-wrap">
@@ -119,7 +125,7 @@ const CompanyDashboard = () => {
               isLoading={loading}
               leftIcon={RefreshCw}
             >
-              Refresh Fleet
+              Refresh
             </Button>
             <Link to="/route">
               <Button variant="secondary" size="sm" leftIcon={MapPin}>
@@ -150,73 +156,110 @@ const CompanyDashboard = () => {
           label="Registered Fleet"
           value={stats.totalTrucks}
           unit="Vehicles"
-          subtitle="Total company-owned trucks"
+          subtitle="Total company-owned commercial fleet"
           change={`${stats.activeAssignments} Drivers Assigned`}
           changeType="neutral"
         />
         <StatCard
-          label="Active Trips"
+          label="Active Corridor Trips"
           value={stats.activeTrips}
           unit="Dispatches"
-          subtitle="Vehicles with assigned corridor"
-          change="En Route"
+          subtitle="Vehicles deployed with assigned route"
+          change="Live on Road"
           changeType="positive"
         />
         <StatCard
-          label="Standby Vehicles"
+          label="Standby Capacity"
           value={stats.availableTrucks}
           unit="Available"
-          subtitle="Ready for corridor scheduling"
-          change={stats.availableTrucks > 0 ? "Ready for Route" : "Fully Assigned"}
+          subtitle="Ready for corridor route assignment"
+          change={stats.availableTrucks > 0 ? "Ready for Route" : "Fully Committed"}
           changeType={stats.availableTrucks > 0 ? "positive" : "neutral"}
         />
         <StatCard
-          label="Payload Capacity Headroom"
-          value={`${remainingHeadroomKg.toLocaleString()} kg`}
-          unit={`/ ${stats.totalCapacityKg.toLocaleString()} Total`}
-          subtitle={`${stats.overallUtilizationPct}% payload capacity committed`}
-          change="Real-time"
-          changeType="neutral"
+          label="FreeTruck Pool Recycling"
+          value={inPoolCount}
+          unit="In Pool"
+          subtitle="Vehicles freed by load consolidation"
+          change={inPoolCount > 0 ? "Available for Re-Dispatch" : "No Freed Trucks"}
+          changeType={inPoolCount > 0 ? "positive" : "neutral"}
         />
       </div>
 
-      {/* 3. Fleet Management Action Shortcuts */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Link
-          to="/truck"
-          className="p-3.5 rounded-lg bg-surface/70 border border-border hover:border-border-strong hover:bg-surface-elevated/70 transition-all flex items-center justify-between group"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-surface-elevated border border-border flex items-center justify-center text-signal-aqua group-hover:border-signal-aqua/40 transition-colors">
-              <Truck className="w-4 h-4" />
-            </div>
+      {/* 3. Fleet Capacity Allocation Cockpit Deck */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Left 2 Cols: Fleet Payload Allocation Bar */}
+        <div className="lg:col-span-2 p-6 rounded-2xl bg-surface/90 border border-border shadow-subtle-card space-y-4">
+          <div className="flex items-center justify-between">
             <div>
-              <span className="font-semibold text-xs sm:text-sm text-ink block">Register Commercial Truck</span>
-              <span className="text-[11px] text-ink-subtle block font-mono">
-                Add license plate, vehicle gross weight, and rated capacity
+              <span className="text-xs font-mono uppercase tracking-wider text-ink-subtle font-semibold block">
+                Committed Payload vs Rated Capacity
               </span>
+              <h3 className="text-base font-bold text-ink mt-0.5">
+                Fleet Payload Utilization Index
+              </h3>
             </div>
+            <Badge variant={stats.overallUtilizationPct > 80 ? "amber" : "aqua"} size="sm">
+              {stats.overallUtilizationPct}% Committed
+            </Badge>
           </div>
-          <ChevronRight className="w-4 h-4 text-ink-subtle group-hover:text-ink transition-transform group-hover:translate-x-0.5" />
-        </Link>
 
-        <Link
-          to="/route"
-          className="p-3.5 rounded-lg bg-surface/70 border border-border hover:border-border-strong hover:bg-surface-elevated/70 transition-all flex items-center justify-between group"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-surface-elevated border border-border flex items-center justify-center text-signal-emerald group-hover:border-signal-emerald/40 transition-colors">
-              <MapPin className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="font-semibold text-xs sm:text-sm text-ink block">Configure Delivery Route</span>
-              <span className="text-[11px] text-ink-subtle block font-mono">
-                Define source, intermediate pickup stops, and destination
+          {/* Large Capacity Bar */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="text-ink">
+                Loaded: <strong>{stats.totalLoadedKg.toLocaleString()} kg</strong>
+              </span>
+              <span className="text-ink-subtle">
+                Rated Fleet Limit: <strong>{stats.totalCapacityKg.toLocaleString()} kg</strong>
               </span>
             </div>
+            <div className="w-full h-3 rounded-full bg-surface-elevated overflow-hidden border border-border/60">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  stats.overallUtilizationPct > 90
+                    ? "bg-signal-coral"
+                    : stats.overallUtilizationPct >= 65
+                    ? "bg-signal-emerald"
+                    : "bg-signal-aqua"
+                }`}
+                style={{ width: `${Math.min(100, stats.overallUtilizationPct)}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[11px] font-mono text-ink-subtle">
+              <span>Available Payload Headroom: <strong className="text-signal-emerald">{remainingHeadroomKg.toLocaleString()} kg</strong></span>
+              <span>{stats.totalTrucks} Vehicles Registered</span>
+            </div>
           </div>
-          <ChevronRight className="w-4 h-4 text-ink-subtle group-hover:text-ink transition-transform group-hover:translate-x-0.5" />
-        </Link>
+        </div>
+
+        {/* Right 1 Col: Quick Action Shortcuts */}
+        <div className="p-6 rounded-2xl bg-surface/90 border border-border shadow-subtle-card space-y-3 flex flex-col justify-between">
+          <div className="space-y-1">
+            <span className="text-xs font-mono uppercase tracking-wider text-ink-subtle font-semibold block">
+              Quick Operations
+            </span>
+            <h4 className="text-sm font-bold text-ink">
+              Fleet Deployment
+            </h4>
+            <p className="text-xs text-ink-muted leading-relaxed">
+              Launch vehicles onto regional freight corridors or onboard new commercial trucks.
+            </p>
+          </div>
+
+          <div className="space-y-2 pt-2">
+            <Link to="/truck" className="block">
+              <Button variant="primary" size="sm" leftIcon={Plus} className="w-full">
+                Register New Truck
+              </Button>
+            </Link>
+            <Link to="/route" className="block">
+              <Button variant="secondary" size="sm" leftIcon={MapPin} className="w-full">
+                Configure Corridor Route
+              </Button>
+            </Link>
+          </div>
+        </div>
       </div>
 
       {/* 4. Fleet Operations Table & Filters */}
@@ -271,7 +314,7 @@ const CompanyDashboard = () => {
                 <TableHead>Assigned Corridor</TableHead>
                 <TableHead>Driver Assignment</TableHead>
                 <TableHead>Capacity Utilization</TableHead>
-                <TableHead align="right">Manage</TableHead>
+                <TableHead align="right">Actions</TableHead>
               </tr>
             </TableHeader>
             <TableBody>
@@ -287,7 +330,7 @@ const CompanyDashboard = () => {
                     {/* Plate */}
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Truck className="w-4 h-4 text-signal-aqua" />
+                        <Truck className="w-4 h-4 text-signal-aqua shrink-0" />
                         <span className="font-mono text-xs sm:text-sm font-semibold text-ink">
                           {truck.licensePlate}
                         </span>
@@ -299,7 +342,7 @@ const CompanyDashboard = () => {
                       {getOperationalStatusBadge(truck)}
                     </TableCell>
 
-                    {/* Corridor */}
+                    {/* Corridor Route */}
                     <TableCell>
                       {route ? (
                         <div className="flex flex-col gap-0.5">
@@ -326,7 +369,7 @@ const CompanyDashboard = () => {
                       {driver ? (
                         <div className="flex flex-col">
                           <span className="text-xs font-medium text-ink flex items-center gap-1">
-                            <UserCheck className="w-3.5 h-3.5 text-signal-emerald" />
+                            <UserCheck className="w-3.5 h-3.5 text-signal-emerald shrink-0" />
                             {driver.name}
                           </span>
                           {driver.phone && (
@@ -364,13 +407,22 @@ const CompanyDashboard = () => {
                       </div>
                     </TableCell>
 
-                    {/* Action */}
+                    {/* Actions */}
                     <TableCell align="right">
-                      <Link to="/truck">
-                        <Button variant="secondary" size="xs">
-                          Manage
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          onClick={() => handleInspectTruck(truck)}
+                        >
+                          Inspect
                         </Button>
-                      </Link>
+                        <Link to="/truck">
+                          <Button variant="secondary" size="xs">
+                            Manage
+                          </Button>
+                        </Link>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -391,6 +443,108 @@ const CompanyDashboard = () => {
           />
         )}
       </div>
+
+      {/* 5. Truck Inspection Modal */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setSelectedTruck(null);
+        }}
+        title={selectedTruck ? `Vehicle Manifest: ${selectedTruck.licensePlate}` : "Vehicle Details"}
+        description={selectedTruck?.route ? `Corridor: ${selectedTruck.route.source} → ${selectedTruck.route.destination}` : "Standby vehicle"}
+        size="md"
+        footer={
+          <div className="flex items-center justify-between w-full">
+            <Link to="/truck">
+              <Button variant="secondary" size="sm">
+                Open Fleet Registry
+              </Button>
+            </Link>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setIsModalOpen(false);
+                setSelectedTruck(null);
+              }}
+            >
+              Done
+            </Button>
+          </div>
+        }
+      >
+        {selectedTruck && (
+          <div className="space-y-4 text-xs">
+            {/* Status & Capacity Card */}
+            <div className="p-4 rounded-xl bg-surface-elevated border border-border space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-sm font-bold text-ink">
+                  {selectedTruck.licensePlate}
+                </span>
+                {getOperationalStatusBadge(selectedTruck)}
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-ink-subtle font-mono text-[11px] pt-2 border-t border-border/40">
+                <div>
+                  Rated Capacity: <strong className="text-ink">{selectedTruck.totalCapacity?.toLocaleString()} kg</strong>
+                </div>
+                <div>
+                  Peak Utilization: <strong className="text-signal-aqua">{selectedTruck.utilizationPct || 0}%</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Route Timeline Inspection */}
+            {selectedTruck.route && (
+              <div className="space-y-2">
+                <span className="cx-eyebrow text-ink-muted">
+                  Corridor Progression & Stops
+                </span>
+                <div className="p-3 rounded-lg bg-surface border border-border">
+                  <CorridorTimeline
+                    stops={selectedTruck.route.stops || []}
+                    currentLoad={selectedTruck.currentLoad || []}
+                    totalCapacity={selectedTruck.totalCapacity || 10000}
+                    source={selectedTruck.route.source}
+                    destination={selectedTruck.route.destination}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Driver Assignment Card */}
+            <div className="space-y-2">
+              <span className="cx-eyebrow text-ink-muted">
+                Driver Allocation
+              </span>
+              <div className="p-3.5 rounded-lg bg-surface border border-border flex items-center justify-between">
+                {selectedTruck.assignment?.driverId ? (
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-signal-emerald/15 border border-signal-emerald/30 flex items-center justify-center text-signal-emerald">
+                      <UserCheck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-semibold text-ink text-xs block">
+                        {selectedTruck.assignment.driverId.name}
+                      </span>
+                      <span className="text-[11px] font-mono text-ink-subtle block">
+                        Phone: {selectedTruck.assignment.driverId.phone || "Verified"}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-ink-subtle italic">
+                    No active driver assigned to this vehicle.
+                  </div>
+                )}
+                <Badge variant={selectedTruck.assignment?.driverId ? "emerald" : "neutral"} size="sm">
+                  {selectedTruck.assignment?.driverId ? "Driver Ready" : "Unassigned"}
+                </Badge>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

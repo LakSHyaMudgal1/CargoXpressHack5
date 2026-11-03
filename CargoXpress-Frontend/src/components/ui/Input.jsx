@@ -54,7 +54,7 @@ export const Input = React.forwardRef(({
             LeftIcon ? 'pl-9' : ''
           } ${RightIcon ? 'pr-9' : ''} ${
             error
-              ? 'border-signal-coral/60 focus:ring-signal-coral'
+              ? 'border-signal-coral/60 focus:ring-signal-coral animate-cx-shake motion-reduce:animate-none'
               : 'border-border hover:border-border-strong'
           } ${className}`}
           {...props}

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Navbar from './Navbar';
 import { Outlet, useLocation } from 'react-router-dom';
 import FooterSec from './Footer';
@@ -13,20 +13,52 @@ const Body = () => {
   const dispatch = useDispatch();
   const user = useSelector((store) => store.user);
   const location = useLocation();
+  const [authChecking, setAuthChecking] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchUser = async () => {
       try {
         const res = await axios.get(BASE_URL + '/me', { withCredentials: true });
-        dispatch(addUser(res.data));
+        if (isMounted) {
+          dispatch(addUser(res.data));
+        }
       } catch {
         // Not logged in — leave store as null
+      } finally {
+        if (isMounted) {
+          setAuthChecking(false);
+        }
       }
     };
     fetchUser();
+    return () => {
+      isMounted = false;
+    };
   }, [dispatch]);
 
   const isLandingPage = location.pathname === '/';
+
+  // Prevent UI flash on direct refresh of operational routes
+  if (authChecking && !isLandingPage) {
+    return (
+      <div className="min-h-screen bg-canvas text-ink flex items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-4 text-center animate-in fade-in duration-200">
+          <div className="w-12 h-12 rounded-xl bg-surface-elevated border border-border-strong flex items-center justify-center text-signal-aqua font-mono font-bold text-sm tracking-wider shadow-sm ring-1 ring-signal-aqua/20">
+            CX
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-mono uppercase tracking-widest text-ink-muted">
+              Cargo<span className="text-signal-aqua">Xpress</span>
+            </span>
+            <span className="text-[11px] text-ink-subtle font-mono">
+              Synchronizing Fleet Session...
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // If user is authenticated and navigating an operational dashboard route, wrap in AppShell
   if (user && !isLandingPage) {

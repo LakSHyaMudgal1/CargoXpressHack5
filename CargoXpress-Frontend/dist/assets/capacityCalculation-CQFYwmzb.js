@@ -1,0 +1,1 @@
+function t(e){if(e==null)return 0;if(typeof e=="number")return!isNaN(e)&&Number.isFinite(e)&&e>0?e:0;if(!Array.isArray(e)||e.length===0)return 0;const i=e.map(r=>r==null||r===""?NaN:Number(r)).filter(r=>typeof r=="number"&&!isNaN(r)&&Number.isFinite(r)&&r>0);return i.length===0?0:Math.max(...i)}export{t as c};

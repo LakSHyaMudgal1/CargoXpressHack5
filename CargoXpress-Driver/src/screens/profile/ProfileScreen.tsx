@@ -16,6 +16,7 @@ import { Header } from '../../components/Header';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
+import { DriverBottomNav } from '../../components/DriverBottomNav';
 
 export const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<AppNavigationProp>();
@@ -137,6 +138,9 @@ export const ProfileScreen: React.FC = () => {
           <Text style={styles.versionText}>CargoXpress Driver v1.0.0 • Build 2026.1</Text>
         </View>
       </ScrollView>
+
+      {/* Persistent Bottom Navigation Dock */}
+      <DriverBottomNav currentScreen="Profile" />
     </SafeAreaView>
   );
 };

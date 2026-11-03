@@ -1,119 +1,160 @@
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { ArrowRight, Truck, TrendingDown, Clock, GitMerge } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
+import MergeSimulator from './MergeSimulator';
 
 const HeroSection = () => {
   const user = useSelector((store) => store.user);
-  const isAdmin   = user && user.emailId?.endsWith('@cargoxpress.com');
-  const isTrader  = user && !isAdmin && user.aadharNumber !== undefined;
-  const isCompany = user && !isAdmin && user.registrationNumber !== undefined;
+  const isAdmin = Boolean(user?.emailId?.endsWith('@cargoxpress.com'));
+  const isTrader = Boolean(user && !isAdmin && user.aadharNumber !== undefined);
+  const isCompany = Boolean(user && !isAdmin && user.registrationNumber !== undefined);
 
-  const stats = [
-    { icon: TrendingDown, value: '40%', label: 'Cost Reduction' },
-    { icon: Clock,        value: '99%', label: 'On-Time Rate' },
-    { icon: GitMerge,     value: '500+', label: 'Routes Merged' },
-    { icon: Truck,        value: '200+', label: 'Active Trucks' },
-  ];
+  const scrollToVisualizer = () => {
+    document.getElementById('merge-visualizer')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Primary action config based on user role
+  const getPrimaryAction = () => {
+    if (!user) {
+      return {
+        label: 'Enter Dispatch Platform',
+        href: '/login',
+        badge: 'Launch',
+      };
+    }
+    if (isAdmin) {
+      return {
+        label: 'Open Dispatch Command',
+        href: '/admin',
+        badge: 'Dispatcher Active',
+      };
+    }
+    if (isCompany) {
+      return {
+        label: 'Open Fleet Operations',
+        href: '/company',
+        badge: 'Carrier Active',
+      };
+    }
+    if (isTrader) {
+      return {
+        label: 'Open Consignments Hub',
+        href: '/trader',
+        badge: 'Consignor Active',
+      };
+    }
+    return {
+      label: 'Open Workstation',
+      href: '/profile',
+      badge: 'Authenticated',
+    };
+  };
+
+  const primaryAction = getPrimaryAction();
 
   return (
-    <section className="relative min-h-screen flex flex-col overflow-hidden">
-      {/* Radial glow — hero-specific, on top of the shared canvas */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(16,185,129,0.10),transparent)] pointer-events-none" />
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/4 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-cyan-500/4 rounded-full blur-3xl pointer-events-none" />
+    <section className="relative min-h-screen flex flex-col pt-24 pb-16 px-6 overflow-hidden">
+      {/* Background radial glow */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(25,232,200,0.08),transparent)] pointer-events-none" />
+      <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-signal-aqua/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/3 right-1/4 w-80 h-80 bg-signal-emerald/5 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Main content */}
-      <div className="relative z-10 flex-1 flex items-center pt-16">
-        <div className="max-w-7xl mx-auto px-6 w-full py-20">
-          <div className="max-w-4xl">
+      {/* Hero Content Header */}
+      <div className="max-w-6xl mx-auto w-full relative z-10 flex flex-col items-center text-center space-y-6 pt-4 sm:pt-10">
+        {/* Editorial Eyebrow Badge */}
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-elevated/90 border border-border-strong text-xs font-mono shadow-sm">
+          <span className="w-2 h-2 rounded-full bg-signal-aqua animate-ping" />
+          <span className="text-ink font-semibold uppercase tracking-wider text-[11px]">
+            Intelligent Freight Consolidation
+          </span>
+          <span className="text-ink-subtle">|</span>
+          <span className="text-signal-aqua font-mono text-[11px]">v1.0 Release</span>
+        </div>
 
-            {/* Badge */}
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-8">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs font-semibold text-emerald-400 tracking-wider uppercase">Smart Logistics Platform</span>
-            </div>
+        {/* Master Headline */}
+        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-ink max-w-4xl leading-[1.08]">
+          Move more freight.<br />
+          <span className="text-signal-aqua">Waste fewer trips.</span>
+        </h1>
 
-            {/* Headline */}
-            <h1 className="text-6xl md:text-7xl font-extrabold text-white leading-[1.05] tracking-tight mb-6">
-              Ship smarter.<br />
-              <span className="bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                Cut costs. Scale fast.
-              </span>
-            </h1>
+        {/* Value Proposition */}
+        <p className="text-base sm:text-lg text-ink-secondary max-w-2xl leading-relaxed">
+          CargoXpress matches overlapping regional delivery corridors, merging compatible truckloads onto a single lead carrier while returning absorbed vehicles back to the available pool.
+        </p>
 
-            <p className="text-lg md:text-xl text-white/50 max-w-2xl leading-relaxed mb-10">
-              CargoXpress connects transport companies and traders on one intelligent platform — automatically merging compatible shipments to eliminate empty miles and slash logistics costs.
+        {/* Action Controls */}
+        <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          <Link to={primaryAction.href}>
+            <button className="group flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold text-sm rounded-lg transition-all shadow-sm hover:scale-[1.01] active:scale-[0.99] select-none">
+              <span>{primaryAction.label}</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          </Link>
+
+          <button
+            type="button"
+            onClick={scrollToVisualizer}
+            className="px-5 py-3 rounded-lg bg-surface-elevated text-ink hover:bg-surface-hover border border-border hover:border-border-strong text-sm font-semibold transition-all shadow-sm select-none"
+          >
+            Explore Merge Engine
+          </button>
+        </div>
+
+        {/* Architectural Principles Strip */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 w-full pt-8 text-left">
+          <div className="p-4 rounded-xl bg-surface/80 border border-border shadow-subtle-card space-y-1">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-signal-aqua font-semibold block">
+              1. Corridor Topology
+            </span>
+            <span className="text-xs sm:text-sm font-bold text-ink block">
+              Subsequence Matching
+            </span>
+            <p className="text-[11px] text-ink-subtle leading-normal">
+              Pairs routes where secondary stops form a topological subset of the lead carrier.
             </p>
+          </div>
 
-            {/* CTAs */}
-            <div className="flex flex-wrap gap-3 mb-16">
-              {!user && (
-                <>
-                  <Link to="/login">
-                    <button className="group flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold rounded-xl transition-all duration-200 shadow-md hover:-translate-y-0.5">
-                      Get Started Free
-                      <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-                    </button>
-                  </Link>
-                  <button
-                    onClick={() => document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' })}
-                    className="px-6 py-3 text-ink-secondary hover:text-ink font-semibold rounded-xl border border-border hover:border-border-strong hover:bg-surface-hover transition-all"
-                  >
-                    How it Works
-                  </button>
-                </>
-              )}
-              {isCompany && (
-                <>
-                  <Link to="/truck">
-                    <button className="group flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold rounded-xl transition-all shadow-md hover:-translate-y-0.5">
-                      <Truck className="h-4 w-4" /> Add Truck
-                      <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-                    </button>
-                  </Link>
-                  <Link to="/route">
-                    <button className="px-6 py-3 text-ink-secondary hover:text-ink font-semibold rounded-xl border border-border hover:border-border-strong hover:bg-surface-hover transition-all">
-                      Add Route
-                    </button>
-                  </Link>
-                </>
-              )}
-              {isTrader && (
-                <Link to="/traderRequest">
-                  <button className="group flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold rounded-xl transition-all shadow-md hover:-translate-y-0.5">
-                    Request Delivery <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-                  </button>
-                </Link>
-              )}
-              {isAdmin && (
-                <Link to="/admin">
-                  <button className="group flex items-center gap-2 px-6 py-3 bg-action-primary text-action-primary-text hover:bg-action-primary-hover font-semibold rounded-xl transition-all shadow-md hover:-translate-y-0.5">
-                    Open Dashboard <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-                  </button>
-                </Link>
-              )}
-            </div>
+          <div className="p-4 rounded-xl bg-surface/80 border border-border shadow-subtle-card space-y-1">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-signal-emerald font-semibold block">
+              2. Segment Capacity
+            </span>
+            <span className="text-xs sm:text-sm font-bold text-ink block">
+              Continuous Headroom
+            </span>
+            <p className="text-[11px] text-ink-subtle leading-normal">
+              Evaluates payload limits across each individual leg to guarantee no overload violations.
+            </p>
+          </div>
 
-            {/* Stats strip */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {stats.map(({ icon: Icon, value, label }) => (
-                <div key={label} className="flex items-center gap-3 p-4 rounded-xl bg-surface/80 border border-border backdrop-blur-sm hover:border-border-strong hover:bg-surface-elevated/70 transition-all shadow-subtle-card">
-                  <div className="w-9 h-9 rounded-lg bg-signal-emerald/10 border border-signal-emerald/20 flex items-center justify-center flex-shrink-0">
-                    <Icon className="h-4 w-4 text-signal-emerald" />
-                  </div>
-                  <div>
-                    <p className="text-lg font-bold text-ink leading-none font-mono tabular-nums">{value}</p>
-                    <p className="text-xs text-ink-muted mt-1">{label}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="p-4 rounded-xl bg-surface/80 border border-border shadow-subtle-card space-y-1">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-signal-purple font-semibold block">
+              3. FreeTruck Lifecycle
+            </span>
+            <span className="text-xs sm:text-sm font-bold text-ink block">
+              Fleet Capacity Recovery
+            </span>
+            <p className="text-[11px] text-ink-subtle leading-normal">
+              Absorbed vehicles are released to the FreeTruck pool for immediate new booking assignment.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-surface/80 border border-border shadow-subtle-card space-y-1">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-signal-amber font-semibold block">
+              4. Driver Cockpit
+            </span>
+            <span className="text-xs sm:text-sm font-bold text-ink block">
+              GPS & Cryptographic POD
+            </span>
+            <p className="text-[11px] text-ink-subtle leading-normal">
+              Turn-by-turn stop status transitions verified by recipient OTP signature and evidence.
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Bottom fade */}
-      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-canvas to-transparent pointer-events-none" />
+      {/* Signature Interactive Visualizer */}
+      <MergeSimulator />
     </section>
   );
 };

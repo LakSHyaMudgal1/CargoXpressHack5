@@ -9,7 +9,8 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  ArrowRight
+  ArrowRight,
+  Truck
 } from "lucide-react";
 import { BASE_URL } from "../utils/constants";
 import PageHeader from "../components/ui/PageHeader";
@@ -145,9 +146,9 @@ const TraderDashboard = () => {
 
       {/* 2. Delivery Exceptions Notification Banner (If Any Failures Occurred) */}
       {stats.failed > 0 && (
-        <div className="p-4 rounded-lg bg-surface-elevated border border-signal-coral/30 flex items-center justify-between gap-4">
+        <div className="p-4 rounded-xl bg-surface-elevated border border-signal-coral/30 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-signal-coral/10 border border-signal-coral/20 flex items-center justify-center text-signal-coral shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-signal-coral/10 border border-signal-coral/20 flex items-center justify-center text-signal-coral shrink-0">
               <AlertTriangle className="w-4 h-4" />
             </div>
             <div>
@@ -169,10 +170,10 @@ const TraderDashboard = () => {
         </div>
       )}
 
-      {/* 3. Consignment Status KPI Strip */}
+      {/* 3. Consignment Pipeline Stage Flow Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
-          label="Total Consignments"
+          label="Total Booked Consignments"
           value={stats.totalRequests}
           unit="Shipments"
           subtitle="All registered cargo bookings"
@@ -188,24 +189,45 @@ const TraderDashboard = () => {
           changeType="positive"
         />
         <StatCard
-          label="Awaiting Carrier"
+          label="Awaiting Carrier Pairing"
           value={stats.awaitingAssignment}
           unit="Pending"
-          subtitle="Awaiting dispatch vehicle pairing"
-          change={stats.awaitingAssignment > 0 ? "In Allocation" : "All Paired"}
+          subtitle="In dispatch consolidation queue"
+          change={stats.awaitingAssignment > 0 ? "Awaiting Allocation" : "All Paired"}
           changeType={stats.awaitingAssignment > 0 ? "warning" : "positive"}
         />
         <StatCard
-          label="Delivered Consignments"
+          label="Delivered Shipments"
           value={stats.delivered}
-          unit="Completed"
-          subtitle="Successfully fulfilled shipments"
+          unit="Fulfilled"
+          subtitle="Successfully delivered with verified POD"
           change={stats.failed > 0 ? `${stats.failed} Exceptions` : "100% Fulfilled"}
           changeType={stats.failed > 0 ? "negative" : "positive"}
         />
       </div>
 
-      {/* 4. Consignments Registry & Tracking Table */}
+      {/* 4. Quick Action & Pipeline Banner */}
+      <div className="p-6 rounded-2xl bg-surface/90 border border-border shadow-subtle-card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <span className="text-xs font-mono uppercase tracking-wider text-signal-emerald font-semibold block">
+            Shipment Logistics Pipeline
+          </span>
+          <h3 className="text-base font-bold text-ink">
+            Need to book additional freight tonnage?
+          </h3>
+          <p className="text-xs text-ink-muted">
+            Submit required cargo weight and corridor stops to have your freight matched with moving carrier vehicles.
+          </p>
+        </div>
+
+        <Link to="/traderRequest">
+          <Button variant="primary" size="md" leftIcon={Plus} rightIcon={ArrowRight}>
+            Post Consignment Request
+          </Button>
+        </Link>
+      </div>
+
+      {/* 5. Consignments Registry & Tracking Table */}
       <div className="space-y-4 pt-2 border-t border-border">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           {/* Segmented Filter Controls */}
@@ -253,10 +275,10 @@ const TraderDashboard = () => {
           <Table>
             <TableHeader>
               <tr>
-                <TableHead>Consignment</TableHead>
+                <TableHead>Consignment ID</TableHead>
                 <TableHead>Route Corridor</TableHead>
-                <TableHead>Cargo Weight</TableHead>
-                <TableHead>Carrier Assignment</TableHead>
+                <TableHead>Cargo Payload</TableHead>
+                <TableHead>Assigned Vehicle</TableHead>
                 <TableHead>Milestone Status</TableHead>
                 <TableHead align="right">Tracking</TableHead>
               </tr>
@@ -303,7 +325,8 @@ const TraderDashboard = () => {
                   <TableCell>
                     {req.carrierLicensePlate ? (
                       <div className="flex flex-col">
-                        <span className="font-mono text-xs font-semibold text-signal-aqua">
+                        <span className="font-mono text-xs font-semibold text-signal-aqua flex items-center gap-1.5">
+                          <Truck className="w-3.5 h-3.5" />
                           {req.carrierLicensePlate}
                         </span>
                         {req.driverName && (
@@ -314,7 +337,7 @@ const TraderDashboard = () => {
                       </div>
                     ) : (
                       <span className="text-ink-subtle text-xs font-mono">
-                        Awaiting Carrier
+                        Awaiting Carrier Pairing
                       </span>
                     )}
                   </TableCell>
@@ -359,7 +382,7 @@ const TraderDashboard = () => {
         )}
       </div>
 
-      {/* 5. Live Consignment Tracking & Milestone Inspection Modal */}
+      {/* 6. Live Consignment Tracking & Milestone Inspection Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => {
@@ -384,19 +407,19 @@ const TraderDashboard = () => {
         {selectedShipment && (
           <div className="space-y-4 text-xs">
             {/* Summary card */}
-            <div className="p-3.5 rounded-lg bg-surface-elevated border border-border space-y-2">
+            <div className="p-4 rounded-xl bg-surface-elevated border border-border space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-xs sm:text-sm text-ink font-mono">
                   {selectedShipment.source} → {selectedShipment.destination}
                 </span>
                 {getStatusBadge(selectedShipment.status)}
               </div>
-              <div className="flex items-center justify-between text-ink-subtle font-mono text-[11px] border-t border-border/40 pt-1.5">
+              <div className="flex items-center justify-between text-ink-subtle font-mono text-[11px] border-t border-border/40 pt-2">
                 <span>Cargo Weight: <strong className="text-ink">{selectedShipment.weightKg} kg</strong></span>
-                <span>Carrier Truck: <strong className="text-signal-aqua">{selectedShipment.carrierLicensePlate || "Pending Pairing"}</strong></span>
+                <span>Carrier Vehicle: <strong className="text-signal-aqua">{selectedShipment.carrierLicensePlate || "Pending Pairing"}</strong></span>
               </div>
               {selectedShipment.failureReason && (
-                <div className="p-2 rounded bg-signal-coral/10 border border-signal-coral/20 text-signal-coral text-xs">
+                <div className="p-2.5 rounded-lg bg-signal-coral/10 border border-signal-coral/20 text-signal-coral text-xs">
                   <strong>Delivery Exception:</strong> {selectedShipment.failureReason}
                 </div>
               )}
@@ -412,7 +435,7 @@ const TraderDashboard = () => {
                 {(selectedShipment.milestones || []).map((m, mIdx) => (
                   <div
                     key={mIdx}
-                    className="p-2.5 rounded-lg bg-surface border border-border flex items-center gap-3"
+                    className="p-3 rounded-xl bg-surface border border-border flex items-center gap-3"
                   >
                     {m.completed ? (
                       <CheckCircle2 className="w-4 h-4 text-signal-emerald shrink-0" />

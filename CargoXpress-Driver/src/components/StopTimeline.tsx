@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { THEME } from '../constants/theme';
 import { StopItem, StopStatus, StopType } from '../types/stop';
@@ -22,7 +22,32 @@ export const StopTimeline: React.FC<StopTimelineProps> = ({
   nextStopIndex = 1,
   onSelectStop,
 }) => {
-  // If rich stops are provided, render enhanced operational stop list
+  const getStatusBadge = (status: StopStatus) => {
+    switch (status) {
+      case 'completed':
+        return { label: 'COMPLETED', variant: 'success' as const };
+      case 'in_progress':
+        return { label: 'OPERATIONS ACTIVE', variant: 'primary' as const };
+      case 'arrived':
+        return { label: 'ARRIVED AT STOP', variant: 'warning' as const };
+      case 'en_route':
+        return { label: 'EN ROUTE', variant: 'info' as const };
+      case 'failed':
+        return { label: 'DELIVERY FAILED', variant: 'danger' as const };
+      default:
+        return { label: 'SCHEDULED', variant: 'neutral' as const };
+    }
+  };
+
+  const formatTimestamp = (ts?: string | null) => {
+    if (!ts) return null;
+    const d = new Date(ts);
+    return isNaN(d.getTime())
+      ? null
+      : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  // 1. If rich stops are provided, render operational timeline
   if (richStops && richStops.length > 0) {
     return (
       <View style={styles.container}>
@@ -32,23 +57,21 @@ export const StopTimeline: React.FC<StopTimelineProps> = ({
           const isCompleted = stop.isCompleted;
           const isFailed = stop.isFailed;
           const isActive = stop.isActive;
+          const statusBadge = getStatusBadge(stop.status);
 
-          const getStatusBadgeVariant = (status: StopStatus) => {
-            switch (status) {
-              case 'completed': return 'success';
-              case 'in_progress': return 'primary';
-              case 'arrived': return 'warning';
-              case 'en_route': return 'info';
-              case 'failed': return 'danger';
-              default: return 'neutral';
-            }
-          };
+          let stopTypeLabel = 'TRANSIT HUB';
+          let stopTypeVariant: 'primary' | 'warning' | 'info' | 'neutral' = 'neutral';
 
-          const formatTimestamp = (ts?: string | null) => {
-            if (!ts) return null;
-            const d = new Date(ts);
-            return isNaN(d.getTime()) ? null : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          };
+          if (stop.stopType === 'pickup') {
+            stopTypeLabel = 'CARGO PICKUP';
+            stopTypeVariant = 'primary';
+          } else if (stop.stopType === 'delivery') {
+            stopTypeLabel = 'CONSIGNMENT DELIVERY';
+            stopTypeVariant = 'warning';
+          } else if (stop.stopType === 'pickup_delivery') {
+            stopTypeLabel = 'PICKUP & DELIVERY';
+            stopTypeVariant = 'info';
+          }
 
           return (
             <TouchableOpacity
@@ -59,11 +82,19 @@ export const StopTimeline: React.FC<StopTimelineProps> = ({
                 isCompleted && styles.completedStopCard,
                 isFailed && styles.failedStopCard,
               ]}
-              activeOpacity={onSelectStop ? 0.7 : 1}
+              activeOpacity={onSelectStop ? 0.75 : 1}
               onPress={() => onSelectStop && onSelectStop(stop.stopIndex, stop.stopName)}
             >
+              {/* Active Banner for Current Stop */}
+              {isActive && (
+                <View style={styles.activeBanner}>
+                  <View style={styles.activeDot} />
+                  <Text style={styles.activeBannerText}>CURRENT OPERATIONAL STOP</Text>
+                </View>
+              )}
+
               <View style={styles.stopRow}>
-                {/* Timeline node */}
+                {/* Timeline node & connector column */}
                 <View style={styles.nodeColumn}>
                   <View
                     style={[
@@ -71,20 +102,23 @@ export const StopTimeline: React.FC<StopTimelineProps> = ({
                       isCompleted && styles.completedCircle,
                       isActive && styles.activeCircle,
                       isFailed && styles.failedCircle,
-                      isFirst && !isCompleted && styles.firstCircle,
-                      isLast && !isCompleted && styles.lastCircle,
+                      isFirst && !isCompleted && !isActive && styles.firstCircle,
+                      isLast && !isCompleted && !isActive && styles.lastCircle,
                     ]}
                   >
                     {isCompleted ? (
-                      <Ionicons name="checkmark" size={14} color={THEME.colors.white} />
+                      <Ionicons name="checkmark" size={14} color="#FFFFFF" />
                     ) : isFailed ? (
-                      <Ionicons name="close" size={14} color={THEME.colors.white} />
+                      <Ionicons name="close" size={14} color="#FFFFFF" />
                     ) : isActive ? (
-                      <Ionicons name="radio-button-on" size={14} color={THEME.colors.primaryLight} />
+                      <View style={styles.innerPulse} />
                     ) : (
-                      <Text style={styles.stepNumber}>{index + 1}</Text>
+                      <Text style={styles.stepNumber}>
+                        {index + 1 < 10 ? `0${index + 1}` : index + 1}
+                      </Text>
                     )}
                   </View>
+
                   {!isLast && (
                     <View
                       style={[
@@ -95,60 +129,90 @@ export const StopTimeline: React.FC<StopTimelineProps> = ({
                   )}
                 </View>
 
-                {/* Stop content */}
+                {/* Stop content details */}
                 <View style={styles.contentColumn}>
-                  <View style={styles.stopHeader}>
-                    <View style={{ flex: 1, gap: 2 }}>
-                      <View style={styles.stopTitleRow}>
-                        <Text style={styles.stopNumberTag}>STOP #{index + 1}</Text>
-                        <Badge
-                          label={stop.stopType === 'pickup' ? 'PICKUP' : stop.stopType === 'delivery' ? 'DELIVERY' : stop.stopType === 'pickup_delivery' ? 'PICKUP & DELIVER' : 'WAYPOINT'}
-                          variant={stop.stopType === 'delivery' ? 'warning' : 'neutral'}
-                        />
-                      </View>
-                      <Text
-                        style={[
-                          styles.stopName,
-                          isActive && styles.activeStopName,
-                          isCompleted && styles.completedStopName,
-                        ]}
-                      >
-                        {stop.stopName}
+                  {/* Top metadata tags */}
+                  <View style={styles.stopMetaHeader}>
+                    <View style={styles.sequenceTagBox}>
+                      <Text style={styles.sequenceTagText}>
+                        STOP {index + 1} OF {richStops.length}
                       </Text>
+                      <Badge label={stopTypeLabel} variant={stopTypeVariant} size="small" />
                     </View>
 
-                    <Badge
-                      label={stop.status.toUpperCase().replace('_', ' ')}
-                      variant={getStatusBadgeVariant(stop.status)}
-                    />
+                    <Badge label={statusBadge.label} variant={statusBadge.variant} size="small" />
                   </View>
 
-                  {/* Shipment references and weight */}
+                  {/* City / Stop Location Title */}
+                  <Text
+                    style={[
+                      styles.stopName,
+                      isActive && styles.activeStopName,
+                      isCompleted && styles.completedStopName,
+                    ]}
+                  >
+                    {stop.stopName}
+                  </Text>
+
+                  {/* Associated Cargo / Shipment references */}
                   {stop.shipments && stop.shipments.length > 0 && (
-                    <View style={styles.shipmentSummaryRow}>
-                      <Ionicons name="cube-outline" size={13} color={THEME.colors.textMuted} />
-                      <Text style={styles.shipmentSummaryText}>
-                        {stop.shipments.map(s => `${s.reference} (${s.weightKg}kg)`).join(', ')}
+                    <View style={styles.shipmentsContainer}>
+                      <View style={styles.shipmentHeaderRow}>
+                        <Ionicons name="cube" size={13} color={THEME.colors.primaryLight} />
+                        <Text style={styles.shipmentCountText}>
+                          {stop.shipments.length} Associated {stop.shipments.length === 1 ? 'Shipment' : 'Shipments'}:
+                        </Text>
+                      </View>
+
+                      <View style={styles.shipmentPillWrap}>
+                        {stop.shipments.map((s, sIdx) => (
+                          <View key={`ship-${s.shipmentId || sIdx}`} style={styles.shipmentPill}>
+                            <Text style={styles.shipmentRefText}>{s.reference}</Text>
+                            <Text style={styles.shipmentWeightText}>{s.weightKg} kg</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Failure reason if delivery failed */}
+                  {isFailed && stop.failureReason && (
+                    <View style={styles.failureReasonBox}>
+                      <Ionicons name="alert-circle" size={14} color={THEME.colors.danger} />
+                      <Text style={styles.failureReasonText}>
+                        Reason: {stop.failureReason}
                       </Text>
                     </View>
                   )}
 
-                  {/* Timestamps & actions link */}
-                  <View style={styles.bottomMetaRow}>
-                    <Text style={styles.timestampMeta}>
+                  {/* Footer Timestamps & Action Prompts */}
+                  <View style={styles.bottomRow}>
+                    <Text style={styles.timestampText}>
                       {isCompleted && stop.completedAt
-                        ? `Completed at ${formatTimestamp(stop.completedAt)}`
+                        ? `Finished: ${formatTimestamp(stop.completedAt)}`
                         : stop.arrivedAt
-                        ? `Arrived at ${formatTimestamp(stop.arrivedAt)}`
-                        : `Updated ${formatTimestamp(stop.lastUpdatedAt)}`}
+                        ? `Arrived: ${formatTimestamp(stop.arrivedAt)}`
+                        : isFirst
+                        ? 'Trip Origin'
+                        : isLast
+                        ? 'Final Destination'
+                        : 'Scheduled Arrival'}
                     </Text>
 
                     {onSelectStop && (
-                      <View style={styles.actionPrompt}>
-                        <Text style={styles.actionPromptText}>
-                          {isCompleted ? 'View Details' : 'Manage Stop'}
+                      <View style={styles.actionLink}>
+                        <Text style={styles.actionLinkText}>
+                          {isActive
+                            ? 'Perform Actions'
+                            : isCompleted
+                            ? 'View POD Details'
+                            : 'Open Stop'}
                         </Text>
-                        <Ionicons name="chevron-forward" size={14} color={THEME.colors.primaryLight} />
+                        <Ionicons
+                          name="chevron-forward"
+                          size={14}
+                          color={isActive ? THEME.colors.primaryLight : THEME.colors.textMuted}
+                        />
                       </View>
                     )}
                   </View>
@@ -161,7 +225,7 @@ export const StopTimeline: React.FC<StopTimelineProps> = ({
     );
   }
 
-  // Fallback to basic string list if richStops not provided
+  // 2. Fallback to basic string list if richStops not provided
   if (!stops || stops.length === 0) {
     return (
       <View style={styles.emptyContainer}>
@@ -178,76 +242,91 @@ export const StopTimeline: React.FC<StopTimelineProps> = ({
         const isNext = index === nextStopIndex;
         const isCompleted = index < nextStopIndex;
 
-        const load = currentLoads && currentLoads[index] !== undefined ? currentLoads[index] : null;
+        const load =
+          currentLoads && currentLoads[index] !== undefined ? currentLoads[index] : null;
         const remaining =
-          remainingLoads && remainingLoads[index] !== undefined ? remainingLoads[index] : null;
+          remainingLoads && remainingLoads[index] !== undefined
+            ? remainingLoads[index]
+            : null;
 
         return (
-          <View key={`${stop}-${index}`} style={styles.stopRow}>
-            {/* Timeline node & connector */}
-            <View style={styles.nodeColumn}>
-              <View
-                style={[
-                  styles.nodeCircle,
-                  isFirst && styles.firstCircle,
-                  isLast && styles.lastCircle,
-                  isNext && styles.nextCircle,
-                  isCompleted && styles.completedCircle,
-                ]}
-              >
-                {isCompleted ? (
-                  <Ionicons name="checkmark" size={12} color={THEME.colors.white} />
-                ) : isFirst ? (
-                  <Ionicons name="radio-button-on" size={12} color={THEME.colors.primaryLight} />
-                ) : isLast ? (
-                  <Ionicons name="location" size={14} color={THEME.colors.secondary} />
-                ) : (
-                  <Text style={styles.stepNumber}>{index + 1}</Text>
-                )}
-              </View>
-              {!isLast && (
+          <View key={`${stop}-${index}`} style={styles.richStopCard}>
+            <View style={styles.stopRow}>
+              {/* Timeline node */}
+              <View style={styles.nodeColumn}>
                 <View
                   style={[
-                    styles.connectorLine,
-                    isCompleted && styles.completedConnectorLine,
+                    styles.nodeCircle,
+                    isCompleted && styles.completedCircle,
+                    isNext && styles.activeCircle,
+                    isFirst && !isCompleted && !isNext && styles.firstCircle,
+                    isLast && !isCompleted && !isNext && styles.lastCircle,
                   ]}
-                />
-              )}
-            </View>
+                >
+                  {isCompleted ? (
+                    <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+                  ) : isFirst ? (
+                    <Ionicons name="radio-button-on" size={12} color={THEME.colors.primaryLight} />
+                  ) : isLast ? (
+                    <Ionicons name="location" size={14} color={THEME.colors.secondary} />
+                  ) : (
+                    <Text style={styles.stepNumber}>
+                      {index + 1 < 10 ? `0${index + 1}` : index + 1}
+                    </Text>
+                  )}
+                </View>
 
-            {/* Stop content */}
-            <View style={styles.contentColumn}>
-              <View style={styles.stopHeader}>
+                {!isLast && (
+                  <View
+                    style={[
+                      styles.connectorLine,
+                      isCompleted && styles.completedConnectorLine,
+                    ]}
+                  />
+                )}
+              </View>
+
+              {/* Stop content */}
+              <View style={styles.contentColumn}>
+                <View style={styles.stopMetaHeader}>
+                  <Text style={styles.sequenceTagText}>
+                    STOP {index + 1} OF {stops.length}
+                  </Text>
+                  {isFirst && <Badge label="ORIGIN" variant="primary" size="small" />}
+                  {isLast && <Badge label="DESTINATION" variant="warning" size="small" />}
+                  {isNext && !isFirst && !isLast && (
+                    <Badge label="NEXT STOP" variant="success" size="small" />
+                  )}
+                </View>
+
                 <Text
                   style={[
                     styles.stopName,
-                    isNext && styles.nextStopName,
+                    isNext && styles.activeStopName,
                     isCompleted && styles.completedStopName,
                   ]}
                 >
                   {stop}
                 </Text>
-                {isFirst && <Text style={styles.typeTag}>ORIGIN</Text>}
-                {isLast && <Text style={[styles.typeTag, styles.destTag]}>DESTINATION</Text>}
-                {isNext && !isFirst && !isLast && (
-                  <Text style={[styles.typeTag, styles.nextTag]}>NEXT STOP</Text>
+
+                {(load !== null || remaining !== null) && (
+                  <View style={styles.loadRow}>
+                    {load !== null && (
+                      <Text style={styles.loadText}>
+                        Load: <Text style={styles.loadValue}>{load.toLocaleString()} kg</Text>
+                      </Text>
+                    )}
+                    {remaining !== null && (
+                      <Text style={styles.loadText}>
+                        Headroom:{' '}
+                        <Text style={styles.headroomValue}>
+                          {remaining.toLocaleString()} kg
+                        </Text>
+                      </Text>
+                    )}
+                  </View>
                 )}
               </View>
-
-              {(load !== null || remaining !== null) && (
-                <View style={styles.loadRow}>
-                  {load !== null && (
-                    <Text style={styles.loadText}>
-                      Load: <Text style={styles.loadValue}>{load.toLocaleString()} kg</Text>
-                    </Text>
-                  )}
-                  {remaining !== null && (
-                    <Text style={styles.loadText}>
-                      Headroom: <Text style={styles.headroomValue}>{remaining.toLocaleString()} kg</Text>
-                    </Text>
-                  )}
-                </View>
-              )}
             </View>
           </View>
         );
@@ -259,7 +338,7 @@ export const StopTimeline: React.FC<StopTimelineProps> = ({
 const styles = StyleSheet.create({
   container: {
     paddingVertical: THEME.spacing.sm,
-    gap: THEME.spacing.sm,
+    gap: 12,
   },
   emptyContainer: {
     padding: THEME.spacing.md,
@@ -269,37 +348,69 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   richStopCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    borderRadius: THEME.borderRadius.md,
+    backgroundColor: '#161F30',
+    borderRadius: THEME.borderRadius.lg,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
-    padding: THEME.spacing.sm,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    padding: 14,
+    gap: 10,
   },
   activeStopCard: {
-    borderColor: THEME.colors.primary,
-    backgroundColor: 'rgba(37, 99, 235, 0.04)',
+    borderColor: THEME.colors.primaryLight,
+    backgroundColor: '#17233B',
+    borderWidth: 1.5,
+    shadowColor: THEME.colors.primaryLight,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   completedStopCard: {
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: 'rgba(16, 185, 129, 0.25)',
+    backgroundColor: 'rgba(16, 185, 129, 0.04)',
   },
   failedStopCard: {
-    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+    backgroundColor: 'rgba(239, 68, 68, 0.04)',
+  },
+  activeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: THEME.borderRadius.sm,
+    alignSelf: 'flex-start',
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: THEME.colors.primaryLight,
+  },
+  activeBannerText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: THEME.colors.primaryLight,
+    letterSpacing: 0.5,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   stopRow: {
     flexDirection: 'row',
   },
   nodeColumn: {
-    width: 32,
+    width: 36,
     alignItems: 'center',
-    marginRight: 6,
+    marginRight: 10,
   },
   nodeCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: THEME.colors.surfaceHover,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#0F172A',
     borderWidth: 2,
-    borderColor: THEME.colors.border,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1,
@@ -311,10 +422,6 @@ const styles = StyleSheet.create({
   lastCircle: {
     borderColor: THEME.colors.secondary,
     backgroundColor: 'rgba(245, 158, 11, 0.2)',
-  },
-  nextCircle: {
-    borderColor: THEME.colors.primaryLight,
-    backgroundColor: THEME.colors.primary,
   },
   activeCircle: {
     borderColor: THEME.colors.primaryLight,
@@ -328,15 +435,22 @@ const styles = StyleSheet.create({
     borderColor: THEME.colors.danger,
     backgroundColor: THEME.colors.danger,
   },
+  innerPulse: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#FFFFFF',
+  },
   stepNumber: {
     color: THEME.colors.textMuted,
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '800',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   connectorLine: {
     width: 2,
     flex: 1,
-    backgroundColor: THEME.colors.border,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     marginVertical: 4,
   },
   completedConnectorLine: {
@@ -344,90 +458,119 @@ const styles = StyleSheet.create({
   },
   contentColumn: {
     flex: 1,
-    gap: 4,
-  },
-  stopHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  stopTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 6,
   },
-  stopNumberTag: {
-    ...THEME.typography.badge,
-    fontSize: 9,
+  stopMetaHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  sequenceTagBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sequenceTagText: {
+    fontSize: 10,
+    fontWeight: '700',
     color: THEME.colors.textMuted,
+    letterSpacing: 0.5,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   stopName: {
-    ...THEME.typography.bodyLarge,
-    fontWeight: '700',
-    color: THEME.colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginTop: 2,
   },
   activeStopName: {
     color: THEME.colors.primaryLight,
   },
   completedStopName: {
     color: THEME.colors.textSecondary,
+    textDecorationLine: 'line-through',
   },
-  nextStopName: {
-    color: THEME.colors.primaryLight,
-    fontWeight: '700',
+  shipmentsContainer: {
+    backgroundColor: '#0F172A',
+    borderRadius: THEME.borderRadius.md,
+    padding: 8,
+    gap: 6,
+    marginTop: 2,
   },
-  typeTag: {
-    ...THEME.typography.badge,
-    fontSize: 9.5,
-    color: THEME.colors.primaryLight,
-    backgroundColor: 'rgba(37, 99, 235, 0.15)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+  shipmentHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  shipmentCountText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: THEME.colors.textSecondary,
+  },
+  shipmentPillWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  shipmentPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  destTag: {
-    color: THEME.colors.secondary,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+  shipmentRefText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
-  nextTag: {
-    color: THEME.colors.success,
-    backgroundColor: THEME.colors.successBg,
+  shipmentWeightText: {
+    fontSize: 10,
+    color: THEME.colors.primaryLight,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
-  shipmentSummaryRow: {
+  failureReasonBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    padding: 8,
+    borderRadius: THEME.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  failureReasonText: {
+    fontSize: 11,
+    color: THEME.colors.danger,
+    fontWeight: '600',
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  timestampText: {
+    fontSize: 11,
+    color: THEME.colors.textMuted,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  actionLink: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 2,
   },
-  shipmentSummaryText: {
-    ...THEME.typography.caption,
-    color: THEME.colors.textMuted,
-    flex: 1,
-  },
-  bottomMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 4,
-    paddingTop: 4,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.04)',
-  },
-  timestampMeta: {
-    ...THEME.typography.caption,
-    fontSize: 10,
-    color: THEME.colors.textMuted,
-  },
-  actionPrompt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  actionPromptText: {
-    ...THEME.typography.caption,
+  actionLinkText: {
+    fontSize: 12,
+    fontWeight: '700',
     color: THEME.colors.primaryLight,
-    fontWeight: '600',
   },
   loadRow: {
     flexDirection: 'row',
@@ -435,15 +578,18 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   loadText: {
-    ...THEME.typography.caption,
+    fontSize: 11,
     color: THEME.colors.textMuted,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   loadValue: {
-    color: THEME.colors.textSecondary,
-    fontWeight: '600',
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   headroomValue: {
     color: THEME.colors.info,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });
+
+export default StopTimeline;

@@ -20,6 +20,7 @@ import { StopTimeline } from '../../components/StopTimeline';
 import { ManifestCard } from '../../components/ManifestCard';
 import { TrackingCard } from '../../components/TrackingCard';
 import { EmptyState } from '../../components/EmptyState';
+import { DriverBottomNav } from '../../components/DriverBottomNav';
 import { ActiveTripResponse } from '../../types/trip';
 import { TripStopsResponse } from '../../types/stop';
 
@@ -197,6 +198,9 @@ export const ActiveTripScreen: React.FC = () => {
           />
         )}
       </ScrollView>
+
+      {/* Persistent Bottom Navigation Dock */}
+      <DriverBottomNav currentScreen="ActiveTrip" />
     </SafeAreaView>
   );
 };
