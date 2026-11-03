@@ -17,6 +17,12 @@ export const Modal = ({
 }) => {
   const modalRef = useRef(null);
   const previousActiveElement = useRef(null);
+  const onCloseRef = useRef(onClose);
+
+  // Keep latest onClose callback in ref without re-triggering modal effect on parent state changes
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -25,7 +31,7 @@ export const Modal = ({
 
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        onClose?.();
+        onCloseRef.current?.();
       } else if (e.key === 'Tab' && modalRef.current) {
         // Trap focus inside modal
         const focusables = modalRef.current.querySelectorAll(
@@ -49,13 +55,24 @@ export const Modal = ({
     document.addEventListener('keydown', handleKeyDown);
     document.body.style.overflow = 'hidden';
 
-    // Focus the first focusable element inside dialog
+    // Focus initial form element on modal open only (never steal focus if user is already focused inside modal)
     const timer = setTimeout(() => {
       if (modalRef.current) {
-        const firstFocusable = modalRef.current.querySelector(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        if (modalRef.current.contains(document.activeElement)) {
+          return;
+        }
+        // Prefer an input/textarea/select or autofocus element over the close "X" button
+        const formField = modalRef.current.querySelector(
+          '[autofocus], input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled])'
         );
-        firstFocusable?.focus();
+        if (formField) {
+          formField.focus();
+        } else {
+          const firstFocusable = modalRef.current.querySelector(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          );
+          firstFocusable?.focus();
+        }
       }
     }, 50);
 
@@ -67,7 +84,7 @@ export const Modal = ({
         previousActiveElement.current.focus();
       }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

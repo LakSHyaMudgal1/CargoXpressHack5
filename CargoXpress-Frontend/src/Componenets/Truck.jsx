@@ -670,7 +670,6 @@ const Truck = () => {
                   setPlateError("");
                 }}
                 error={plateError}
-                autoFocus
                 required
               />
             </div>
