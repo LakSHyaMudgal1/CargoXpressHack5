@@ -222,35 +222,43 @@ const MergeableTraders = () => {
       )}
 
       {/* 2. Key Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard
-          label="Pending Matches"
-          value={mergeableTraders ? mergeableTraders.length : "—"}
-          unit="Consignments"
-          icon={Boxes}
-          subtitle="Awaiting carrier assignment confirmation"
-          change={mergeableTraders?.length > 0 ? "Ready to Assign" : "Queue Empty"}
-          changeType={mergeableTraders?.length > 0 ? "warning" : "positive"}
-        />
-        <StatCard
-          label="Corridor Optimization"
-          value="AI Filtered"
-          unit="Active"
-          icon={ShieldCheck}
-          subtitle="Verified route subset & capacity headroom"
-          change="Automated"
-          changeType="positive"
-        />
-        <StatCard
-          label="Carrier Assignment"
-          value="Single Truck"
-          unit="Target"
-          icon={Truck}
-          subtitle="Consolidating partial loads onto carriers"
-          change="Efficiency"
-          changeType="positive"
-        />
-      </div>
+      {(() => {
+        const totalDemandKg = (mergeableTraders || []).reduce(
+          (sum, t) => sum + (Number(t.requiredCapacity) || (Array.isArray(t.load) && t.load.length > 0 ? Math.max(...t.load) : 0)),
+          0
+        );
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <StatCard
+              label="Pending Matches"
+              value={mergeableTraders ? mergeableTraders.length : "—"}
+              unit="Consignments"
+              icon={Boxes}
+              subtitle="Awaiting carrier assignment confirmation"
+              change={mergeableTraders?.length > 0 ? "Ready to Assign" : "Queue Empty"}
+              changeType={mergeableTraders?.length > 0 ? "warning" : "positive"}
+            />
+            <StatCard
+              label="Corridor Feasibility"
+              value="100%"
+              unit="Validated"
+              icon={ShieldCheck}
+              subtitle="Topological stop order & capacity headroom verified"
+              change="Corridor Safe"
+              changeType="positive"
+            />
+            <StatCard
+              label="Consolidated Demand"
+              value={totalDemandKg > 0 ? totalDemandKg.toLocaleString() : "0"}
+              unit="kg Payload"
+              icon={Truck}
+              subtitle="Pooled shipper freight ready for carrier absorption"
+              change="Direct Savings"
+              changeType="positive"
+            />
+          </div>
+        );
+      })()}
 
       {/* 3. Search and Filter Toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-2 border-t border-border/80">

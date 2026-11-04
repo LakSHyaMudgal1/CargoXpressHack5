@@ -54,10 +54,15 @@ describe('Interactive Product Demo and Showcase Mode API Suite', () => {
             Truck.deleteMany({ licensePlate: /^DEMO-/ }),
             Route.deleteMany({ path: { $regex: /DEMO/i } }),
             Driver.deleteMany({ emailId: /^demo-.*@cargoxpress\.com$/ }),
-            DriverAssignment.deleteMany({}),
-            MergeablePair.deleteMany({}),
-            MergedSchedule.deleteMany({}),
-            TripStopExecution.deleteMany({})
+            DriverAssignment.deleteMany({ notes: /DEMO/i }),
+            MergeablePair.deleteMany({
+                $or: [
+                    { truckOneLicensePlate: /^DEMO-/ },
+                    { truckTwoLicensePlate: /^DEMO-/ }
+                ]
+            }),
+            MergedSchedule.deleteMany({ transportationTruckLicensePlate: /^DEMO-/ }),
+            TripStopExecution.deleteMany({ truckLicensePlate: /^DEMO-/ })
         ]).catch(() => {});
 
         if (server) {
